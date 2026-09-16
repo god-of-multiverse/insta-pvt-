@@ -60,6 +60,7 @@ let db = {
   groupMessages: [],
   stories: [],
   notifications: [],
+  circles: [],
 };
 
 const save = () => {
@@ -74,7 +75,7 @@ const load = () => {
   if (!fs.existsSync(DATA_FILE)) return false;
   try {
     const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    db = { stories: [], notifications: [], ...parsed };
+    db = { stories: [], notifications: [], circles: [], ...parsed };
     return Array.isArray(db.users) && db.users.length > 0;
   } catch {
     return false;
@@ -140,6 +141,15 @@ function seed() {
     commentsDisabled: false,
     createdAt: new Date(Date.now() - i * 5400000).toISOString(),
   }));
+
+  // Real circle membership, mirroring the Circle model. The owner is implicit;
+  // `members` is everyone else admitted. ada is in mira's Hometown and kai's
+  // College, which is why she can see those posts — not because she named them.
+  db.circles = [
+    { _id: id(), owner: mira._id, name: 'Hometown', members: [ada._id] },
+    { _id: id(), owner: kai._id, name: 'College', members: [ada._id] },
+    { _id: id(), owner: ada._id, name: 'General', members: [mira._id, kai._id] },
+  ];
 
   db.stories = [
     {
@@ -277,10 +287,28 @@ app.get('/api/auth/me', auth, (req, res) => res.json({ user: pub(req.user) }));
 
 /* ----------------------------------------------------------------- posts -- */
 
+/**
+ * True when `viewerId` may read a post: they wrote it, or they own/belong to
+ * the circle it was published to. Circle names are scoped to their author, so
+ * naming someone else's circle grants nothing.
+ */
+function canSeePost(post, viewerId) {
+  const authorId = String(post.user._id || post.user);
+  if (authorId === String(viewerId)) return true;
+  const circle = (db.circles || []).find(
+    (c) => String(c.owner) === authorId && c.name === post.circle
+  );
+  if (!circle) return false;
+  return (circle.members || []).some((m) => String(m) === String(viewerId));
+}
+
 app.get('/api/posts', auth, (req, res) => {
   const { circle } = req.query;
   const posts = db.posts
     .filter((p) => !p.archived)
+    // Authorization first: membership decides what exists for this viewer.
+    .filter((p) => canSeePost(p, req.user._id))
+    // Then the query string, which only narrows what they may already see.
     .filter((p) => !circle || circle === 'All' || p.circle === circle)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .map((p) => ({

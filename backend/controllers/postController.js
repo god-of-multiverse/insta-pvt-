@@ -1,4 +1,29 @@
 const Post = require('../models/Post');
+const Circle = require('../models/Circle');
+
+/**
+ * Builds the Mongo filter describing every post `userId` is allowed to read.
+ *
+ * A post is visible when the viewer wrote it, or when the viewer owns or has
+ * been admitted to the circle it was published to. Circle names are scoped to
+ * their author, so membership is matched on the (author, circle name) pair —
+ * naming a circle you are not in matches nothing.
+ */
+const visibilityFilter = async (userId) => {
+  const circles = await Circle.visibleTo(userId);
+  const byOwner = new Map();
+  circles.forEach(({ owner, name }) => {
+    const key = String(owner);
+    if (!byOwner.has(key)) byOwner.set(key, []);
+    byOwner.get(key).push(name);
+  });
+
+  const clauses = [{ user: userId }];
+  byOwner.forEach((names, owner) => {
+    clauses.push({ user: owner, circle: { $in: names } });
+  });
+  return { $or: clauses };
+};
 
 // @desc    Create a new post
 // @route   POST /api/posts
@@ -24,6 +49,9 @@ exports.createPost = async (req, res, next) => {
     });
 
     await post.save();
+    // Keep a real Circle record for this audience so membership is manageable
+    // and the visibility filter has something to match against.
+    await Circle.ensure(userId, post.circle);
     console.log('✅ Post created in circle:', post.circle);
 
     await post.populate('user', 'username');
@@ -50,12 +78,17 @@ exports.createPost = async (req, res, next) => {
 exports.getPosts = async (req, res, next) => {
   try {
     const { circle } = req.query;
-    const query = circle && circle !== 'All' ? { circle } : {};
+
+    // Authorization comes from circle membership, never from the query string.
+    // `?circle=` only narrows what the viewer may already see.
+    const allowed = await visibilityFilter(req.user.id);
+    const query =
+      circle && circle !== 'All' ? { $and: [allowed, { circle }] } : allowed;
 
     const posts = await Post.find(query)
       .populate('user', 'username')
       .sort({ createdAt: -1 });
-    
+
     res.json(posts);
   } catch (error) {
     next(error);
@@ -67,10 +100,12 @@ exports.getPosts = async (req, res, next) => {
 // @access  Private/Public
 exports.getUserPosts = async (req, res, next) => {
   try {
-    const posts = await Post.find({ user: req.params.userId })
+    // Same rule as the main feed: only circles this viewer belongs to.
+    const allowed = await visibilityFilter(req.user.id);
+    const posts = await Post.find({ $and: [allowed, { user: req.params.userId }] })
       .populate('user', 'username')
       .sort({ createdAt: -1 });
-    
+
     res.json(posts);
   } catch (error) {
     next(error);

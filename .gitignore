@@ -1,3 +1,23 @@
+# Dependencies — restore with `npm ci`
+node_modules/
 
-# mock server data
+# Secrets. Never commit these; use .env.example as the template.
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Mock server data
 backend/.mock-data.json
+
+# Uploaded media
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Logs and OS cruft
+*.log
+npm-debug.log*
+.DS_Store
