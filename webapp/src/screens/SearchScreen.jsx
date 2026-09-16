@@ -1,210 +1,305 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
-import { circleMeta } from '../lib/circles';
+import Avatar from '../components/Avatar';
 import { useToast } from '../components/Toast';
 
 /**
- * Circles page — replaces the old "Search" tab.
- * There is deliberately no global people search in Inasta: you add someone by
- * exact username to a specific circle, and that is the only way in.
+ * Contacts tab. WeChat's layout: a search field, a block of function rows
+ * (New Friends / Group Chats / Tags), then contacts grouped under letter
+ * headings with an alphabetical feel.
  */
-const CirclesScreen = ({ localCircles, onAddCircle }) => {
+const ContactsScreen = ({ onAddCircle }) => {
   const [groups, setGroups] = useState([]);
+  const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [sheet, setSheet] = useState(null); // 'group' | 'member'
   const [name, setName] = useState('');
   const [selected, setSelected] = useState('');
   const [member, setMember] = useState('');
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get('/api/groups');
-      const list = response.groups || [];
-      setGroups(list);
-      if (!selected && list.length) setSelected(list[0]._id);
-    } catch (error) {
-      toast(error.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    load();
+    (async () => {
+      try {
+        const [groupResponse, users] = await Promise.all([
+          api.get('/api/groups'),
+          api.get('/api/messages/users'),
+        ]);
+        const list = groupResponse.groups || [];
+        setGroups(list);
+        setPeople(users || []);
+        if (list.length) setSelected(list[0]._id);
+      } catch (error) {
+        toast(error.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const createCircle = async (event) => {
+  const createGroup = async (event) => {
     event.preventDefault();
     if (!name.trim()) return;
     setBusy(true);
     try {
       const response = await api.post('/api/groups', { name: name.trim() });
-      const created = response.group;
-      setGroups((prev) => [created, ...prev]);
-      setSelected(created._id);
-      onAddCircle?.(created.name);
+      setGroups((prev) => [response.group, ...prev]);
+      setSelected(response.group._id);
+      onAddCircle?.(response.group.name);
       setName('');
-      toast(`Circle “${created.name}” created`, 'success');
+      setSheet(null);
+      toast('Group created');
     } catch (error) {
-      toast(error.message, 'error');
+      toast(error.message);
     } finally {
       setBusy(false);
     }
   };
 
-  const invite = async (event) => {
+  const addMember = async (event) => {
     event.preventDefault();
     if (!selected || !member.trim()) return;
     setBusy(true);
     try {
-      const response = await api.post(`/api/groups/${selected}/members`, { username: member.trim() });
+      const response = await api.post(`/api/groups/${selected}/members`, {
+        username: member.trim(),
+      });
       setGroups((prev) => prev.map((g) => (g._id === selected ? response.group : g)));
       setMember('');
-      toast(`${response.addedUser.username} joined the circle`, 'success');
+      setSheet(null);
+      toast(`${response.addedUser.username} added`);
     } catch (error) {
-      toast(error.message, 'error');
+      toast(error.message);
     } finally {
       setBusy(false);
     }
   };
 
+  const sections = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const filtered = people.filter((p) => !needle || (p.username || '').toLowerCase().includes(needle));
+    const map = new Map();
+    filtered
+      .slice()
+      .sort((a, b) => (a.username || '').localeCompare(b.username || ''))
+      .forEach((person) => {
+        const letter = (person.username || '#')[0].toUpperCase();
+        if (!map.has(letter)) map.set(letter, []);
+        map.get(letter).push(person);
+      });
+    return [...map.entries()];
+  }, [people, query]);
+
   return (
-    <div className="page">
-      <div className="topbar">
-        <div>
-          <h1>Circles</h1>
-          <p className="sub">Small rooms with fixed membership. People in one never see another.</p>
+    <>
+      <div className="wx-searchwrap">
+        <div className="wx-search">
+          <Icon name="search" size={15} strokeWidth={2} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search"
+            aria-label="Search contacts"
+          />
         </div>
       </div>
 
-      <div className="two-col">
-        <div className="stack" style={{ gap: 16 }}>
-          <form className="side-form" onSubmit={createCircle}>
-            <span className="eyebrow">Start a circle</span>
-            <input
-              className="field"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="e.g. Sunday Dinners"
-            />
-            <button className="btn btn-primary" type="submit" disabled={busy || !name.trim()}>
-              {busy ? <span className="spinner" /> : 'Create circle'}
-            </button>
-          </form>
+      <div className="wx-group">
+        <button className="wx-cell hair-b hair-inset" onClick={() => setSheet('member')}>
+          <span className="wx-cell-ico" style={{ background: '#fa9d3b' }}>
+            <Icon name="plus" size={17} strokeWidth={2.2} />
+          </span>
+          <span className="wx-cell-body">
+            <span className="wx-cell-title">New Friends</span>
+          </span>
+          <Icon name="chev" size={16} strokeWidth={2} className="wx-chev" />
+        </button>
+        <button className="wx-cell" onClick={() => setSheet('group')}>
+          <span className="wx-cell-ico" style={{ background: '#07c160' }}>
+            <Icon name="group" size={17} />
+          </span>
+          <span className="wx-cell-body">
+            <span className="wx-cell-title">Group Chats</span>
+          </span>
+          <span className="wx-cell-val">{groups.length}</span>
+          <Icon name="chev" size={16} strokeWidth={2} className="wx-chev" />
+        </button>
+      </div>
 
-          <form className="side-form" onSubmit={invite}>
-            <span className="eyebrow">Invite by username</span>
-            <select
-              className="field"
-              value={selected}
-              onChange={(event) => setSelected(event.target.value)}
-              aria-label="Choose a circle"
-            >
-              {groups.length === 0 ? (
-                <option value="">No circles yet</option>
-              ) : (
-                groups.map((group) => (
-                  <option key={group._id} value={group._id}>
-                    {group.name}
-                  </option>
-                ))
-              )}
-            </select>
-            <input
-              className="field"
-              value={member}
-              onChange={(event) => setMember(event.target.value)}
-              placeholder="exact username"
-            />
-            <button className="btn btn-ghost" type="submit" disabled={busy || !selected || !member.trim()}>
-              <Icon name="plus" size={15} /> Add to circle
-            </button>
-            <p style={{ fontSize: 12.5, color: 'var(--text-mute)' }}>
-              There is no people search. You need the exact username — that is the point.
-            </p>
-          </form>
+      {groups.length > 0 && (
+        <>
+          <div className="wx-section-label">Groups</div>
+          <div className="wx-group" style={{ marginTop: 0 }}>
+            {groups.map((group, index) => (
+              <div
+                key={group._id}
+                className={`wx-cell ${index < groups.length - 1 ? 'hair-b hair-inset' : ''}`}
+              >
+                <Avatar name={group.name} group />
+                <span className="wx-cell-body">
+                  <span className="wx-cell-title">{group.name}</span>
+                  <span className="wx-cell-sub">
+                    {(group.members || []).map((m) => m.username).join(', ') || 'Only you'}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {loading ? (
+        <div className="wx-loading">
+          <div className="wx-spin" />
         </div>
-
-        <div>
-          {loading ? (
-            <div className="circle-grid">
-              {[0, 1, 2].map((i) => (
-                <div className="skeleton" key={i} style={{ height: 168 }} />
+      ) : (
+        sections.map(([letter, list]) => (
+          <div key={letter}>
+            <div className="wx-section-label">{letter}</div>
+            <div className="wx-group" style={{ marginTop: 0 }}>
+              {list.map((person, index) => (
+                <div
+                  key={person._id}
+                  className={`wx-cell ${index < list.length - 1 ? 'hair-b hair-inset' : ''}`}
+                >
+                  <Avatar name={person.username} />
+                  <span className="wx-cell-body">
+                    <span className="wx-cell-title">{person.username}</span>
+                  </span>
+                </div>
               ))}
             </div>
-          ) : groups.length === 0 ? (
-            <div className="empty">
-              <h3>No circles yet</h3>
-              <p>
-                A circle is a fixed group of people. Create one for home, one for college, and post to
-                each without the other ever knowing.
-              </p>
-            </div>
-          ) : (
-            <div className="circle-grid">
-              {groups.map((group) => {
-                const meta = circleMeta(group.name);
-                const members = group.members || [];
-                return (
-                  <article className="circle-card" key={group._id}>
-                    <div className="circle-card-top">
-                      <div>
-                        <h3>{group.name}</h3>
-                        <span className="sub">
-                          {members.length} {members.length === 1 ? 'member' : 'members'} · created by{' '}
-                          {group.creator?.username || 'you'}
-                        </span>
-                      </div>
-                      <span className="chip chip-solid" style={{ '--chip-color': meta.color }}>
-                        <span className="dot" />
-                        Private
-                      </span>
-                    </div>
+          </div>
+        ))
+      )}
 
-                    <div className="member-row">
-                      {members.length === 0 ? (
-                        <span style={{ fontSize: 13, color: 'var(--text-mute)' }}>Just you so far.</span>
-                      ) : (
-                        members.map((m) => (
-                          <span className="member-pill" key={m._id || m.username}>
-                            <span className="avatar avatar-xs">
-                              {(m.username || 'u')[0].toUpperCase()}
-                            </span>
-                            {m.username}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
+      <div style={{ height: 20 }} />
 
-          {localCircles?.length > 0 && (
-            <div style={{ marginTop: 26 }}>
-              <span className="eyebrow">Post labels in use</span>
-              <div className="member-row" style={{ marginTop: 10 }}>
-                {localCircles.map((circle) => {
-                  const meta = circleMeta(circle);
-                  return (
-                    <span className="chip" key={circle} style={{ '--chip-color': meta.color }}>
-                      <span className="dot" />
-                      {circle}
-                    </span>
-                  );
-                })}
-              </div>
+      {/* Action sheets */}
+      {sheet && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 200,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: 30,
+          }}
+          onClick={() => setSheet(null)}
+        >
+          <form
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={sheet === 'group' ? createGroup : addMember}
+            style={{
+              width: '100%',
+              maxWidth: 300,
+              background: '#fff',
+              borderRadius: 10,
+              padding: 20,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 14 }}>
+              {sheet === 'group' ? 'New Group Chat' : 'Add Friend'}
             </div>
-          )}
+
+            {sheet === 'group' ? (
+              <input
+                autoFocus
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Group name"
+                style={{
+                  width: '100%',
+                  padding: 9,
+                  border: '1px solid #e0e0e0',
+                  borderRadius: 4,
+                  fontSize: 15,
+                  outline: 'none',
+                }}
+              />
+            ) : (
+              <>
+                <select
+                  value={selected}
+                  onChange={(event) => setSelected(event.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: 9,
+                    border: '1px solid #e0e0e0',
+                    borderRadius: 4,
+                    fontSize: 15,
+                    marginBottom: 8,
+                    background: '#fff',
+                  }}
+                >
+                  {groups.length === 0 ? (
+                    <option value="">No groups yet</option>
+                  ) : (
+                    groups.map((group) => (
+                      <option key={group._id} value={group._id}>
+                        {group.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <input
+                  autoFocus
+                  value={member}
+                  onChange={(event) => setMember(event.target.value)}
+                  placeholder="WeChat ID / username"
+                  style={{
+                    width: '100%',
+                    padding: 9,
+                    border: '1px solid #e0e0e0',
+                    borderRadius: 4,
+                    fontSize: 15,
+                    outline: 'none',
+                  }}
+                />
+              </>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => setSheet(null)}
+                style={{
+                  flex: 1,
+                  padding: 9,
+                  borderRadius: 4,
+                  background: '#f2f2f2',
+                  fontSize: 15,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={busy}
+                style={{
+                  flex: 1,
+                  padding: 9,
+                  borderRadius: 4,
+                  background: '#07c160',
+                  color: '#fff',
+                  fontSize: 15,
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </form>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 };
 
-export default CirclesScreen;
+export default ContactsScreen;

@@ -4,13 +4,13 @@ import './src/App.css';
 import { api, session } from './src/services/api';
 import { DEFAULT_CIRCLES } from './src/lib/circles';
 import { ToastProvider, useToast } from './src/components/Toast';
-import Icon from './src/components/Icon';
-import BottomNav, { NAV_ITEMS } from './src/components/BottomNav';
-import LandingScreen from './src/screens/LandingScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import CirclesScreen from './src/screens/SearchScreen';
-import UploadScreen from './src/screens/UploadScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
+import BottomNav, { TABS } from './src/components/BottomNav';
+import AuthScreen from './src/screens/LoginScreen';
+import MomentsScreen from './src/screens/HomeScreen';
+import ContactsScreen from './src/screens/SearchScreen';
+import DiscoverScreen from './src/screens/DiscoverScreen';
+import ComposeScreen from './src/screens/UploadScreen';
+import MeScreen from './src/screens/ProfileScreen';
 import ChatScreen from './src/screens/ChatScreen';
 
 const CIRCLES_KEY = 'inasta.circles';
@@ -26,7 +26,10 @@ const readStoredCircles = () => {
 
 function Shell() {
   const [currentUser, setCurrentUser] = useState(() => session.user);
-  const [screen, setScreen] = useState('home');
+  const [tab, setTab] = useState('chat');
+  // Full-screen views stacked above the tabs: 'moments' | 'compose'
+  const [overlay, setOverlay] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const [activeCircle, setActiveCircle] = useState('All');
   const [circles, setCircles] = useState(readStoredCircles);
   const [posts, setPosts] = useState([]);
@@ -45,7 +48,7 @@ function Shell() {
       const data = await api.get(`/api/posts?circle=${encodeURIComponent(activeCircle)}`);
       setPosts(Array.isArray(data) ? data : []);
     } catch (error) {
-      toast(error.message, 'error');
+      toast(error.message);
     } finally {
       setLoadingPosts(false);
     }
@@ -55,7 +58,6 @@ function Shell() {
     if (isLoggedIn) loadPosts();
   }, [isLoggedIn, loadPosts]);
 
-  // Circles discovered on existing posts should show up as filters too.
   useEffect(() => {
     const found = [...new Set(posts.map((post) => post.circle).filter(Boolean))];
     const missing = found.filter((name) => !circles.includes(name));
@@ -63,111 +65,127 @@ function Shell() {
   }, [posts, circles]);
 
   const addCircle = useCallback((name) => {
-    setCircles((prev) => (prev.some((c) => c.toLowerCase() === name.toLowerCase()) ? prev : [...prev, name]));
+    setCircles((prev) =>
+      prev.some((c) => c.toLowerCase() === name.toLowerCase()) ? prev : [...prev, name]
+    );
   }, []);
 
   const logout = () => {
     session.clear();
     setCurrentUser(null);
     setPosts([]);
-    setScreen('home');
+    setTab('chat');
+    setOverlay(null);
     setActiveCircle('All');
-  };
-
-  const handleUploadSuccess = (_post, circle) => {
-    if (circle) {
-      addCircle(circle);
-      setActiveCircle(circle);
-    }
-    setScreen('home');
-    loadPosts();
   };
 
   const deletePost = async (postId) => {
     try {
       await api.delete(`/api/posts/${postId}`);
       setPosts((prev) => prev.filter((post) => (post._id || post.id) !== postId));
-      toast('Post deleted', 'success');
+      toast('Deleted');
     } catch (error) {
-      toast(error.message, 'error');
+      toast(error.message);
     }
   };
 
-  if (!isLoggedIn) {
-    return <LandingScreen onLoginSuccess={setCurrentUser} />;
+  if (!isLoggedIn) return <AuthScreen onLoginSuccess={setCurrentUser} />;
+
+  /* Full-screen overlays sit above the tab bar, as they do in WeChat */
+  if (overlay === 'compose') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body">
+          <ComposeScreen
+            circles={circles}
+            onAddCircle={addCircle}
+            onCancel={() => setOverlay('moments')}
+            onUploadSuccess={(_post, circle) => {
+              if (circle) {
+                addCircle(circle);
+                setActiveCircle(circle);
+              }
+              setOverlay('moments');
+              loadPosts();
+            }}
+          />
+        </div>
+      </div>
+    );
   }
 
-  const screens = {
-    home: (
-      <HomeScreen
-        posts={posts}
-        loading={loadingPosts}
-        activeCircle={activeCircle}
-        setActiveCircle={setActiveCircle}
-        circles={circles}
-        currentUser={currentUser}
-        onDeletePost={deletePost}
-        onCompose={() => setScreen('upload')}
-      />
-    ),
-    search: <CirclesScreen localCircles={circles} onAddCircle={addCircle} />,
-    upload: (
-      <UploadScreen onUploadSuccess={handleUploadSuccess} circles={circles} onAddCircle={addCircle} />
-    ),
-    chat: <ChatScreen currentUser={currentUser} />,
-    profile: (
-      <ProfileScreen currentUser={currentUser} posts={posts} circles={circles} onLogout={logout} />
-    ),
-  };
+  if (overlay === 'moments') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body" style={{ background: '#fff' }}>
+          <MomentsScreen
+            posts={posts}
+            loading={loadingPosts}
+            activeCircle={activeCircle}
+            setActiveCircle={setActiveCircle}
+            circles={circles}
+            currentUser={currentUser}
+            onDeletePost={deletePost}
+            onCompose={() => setOverlay('compose')}
+          />
+        </div>
+        <div className="wx-nav" style={{ position: 'sticky', bottom: 0, borderTop: '1px solid #e5e5e5' }}>
+          <button className="wx-nav-btn left" onClick={() => setOverlay(null)} aria-label="Back">
+            <span style={{ fontSize: 15 }}>‹ Back</span>
+          </button>
+          <span />
+          <span />
+        </div>
+      </div>
+    );
+  }
+
+  const titles = { chat: 'Chats', contacts: 'Contacts', discover: 'Discover', me: 'Me' };
 
   return (
-    <div className="shell">
-      <aside className="rail">
-        <div className="rail-brand">
-          <div className="wordmark">
-            <span className="mark" />
-            Inasta
-          </div>
-        </div>
-
-        <nav className="rail-nav">
-          {NAV_ITEMS.filter((item) => item.id !== 'upload').map((item) => (
-            <button
-              key={item.id}
-              className={`rail-item ${screen === item.id ? 'on' : ''}`}
-              onClick={() => setScreen(item.id)}
-              aria-current={screen === item.id ? 'page' : undefined}
-            >
-              <Icon name={item.icon} size={20} filled={screen === item.id && item.id === 'home'} />
-              {item.label}
-              {item.id === 'search' && <span className="count">{circles.length}</span>}
+    <div className="wx-shell">
+      {/* The conversation view supplies its own nav bar */}
+      {!(tab === 'chat' && chatOpen) && (
+        <div className="wx-nav">
+          <span />
+          <div className="wx-nav-title">{titles[tab]}</div>
+          {tab === 'chat' ? (
+            <button className="wx-nav-btn right" aria-label="New chat">
+              <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
             </button>
-          ))}
-        </nav>
-
-        <button className="btn btn-primary btn-block rail-compose" onClick={() => setScreen('upload')}>
-          <Icon name="compose" size={17} />
-          New post
-        </button>
-
-        <div className="rail-foot">
-          <div className="rail-user">
-            <div className="avatar avatar-sm">{(currentUser.username || 'u')[0].toUpperCase()}</div>
-            <div className="who">
-              <div className="name">{currentUser.username}</div>
-              <div className="meta">Private account</div>
-            </div>
-          </div>
-          <button className="btn btn-quiet" onClick={logout} style={{ justifyContent: 'flex-start' }}>
-            <Icon name="logout" size={16} />
-            Log out
-          </button>
+          ) : (
+            <span />
+          )}
         </div>
-      </aside>
+      )}
 
-      <main className="viewport">{screens[screen] || screens.home}</main>
+      <div className="wx-body" style={{ background: tab === 'chat' && chatOpen ? '#ededed' : undefined }}>
+        {tab === 'chat' && <ChatScreen currentUser={currentUser} onOpenChange={setChatOpen} />}
+        {tab === 'contacts' && <ContactsScreen onAddCircle={addCircle} />}
+        {tab === 'discover' && (
+          <DiscoverScreen onOpenMoments={() => setOverlay('moments')} momentsBadge={posts.length || null} />
+        )}
+        {tab === 'me' && (
+          <MeScreen
+            currentUser={currentUser}
+            posts={posts}
+            circles={circles}
+            onLogout={logout}
+            onOpenMoments={() => setOverlay('moments')}
+          />
+        )}
+      </div>
 
-      <BottomNav currentScreen={screen} setCurrentScreen={setScreen} />
+      {!(tab === 'chat' && chatOpen) && (
+        <BottomNav
+          current={tab}
+          onChange={(next) => {
+            setTab(next);
+            setChatOpen(false);
+          }}
+          badges={{ discover: posts.length ? true : null }}
+        />
+      )}
     </div>
   );
 }

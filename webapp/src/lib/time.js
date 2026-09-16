@@ -2,31 +2,63 @@ const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 
-/** "just now" / "12m" / "4h" / "3d" / "12 Mar" */
-export const relativeTime = (value) => {
-  if (!value) return 'just now';
-  const then = new Date(value).getTime();
-  if (Number.isNaN(then)) return 'just now';
-  const diff = Date.now() - then;
+const clock = (date) =>
+  date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
 
-  if (diff < MIN) return 'just now';
-  if (diff < HOUR) return `${Math.floor(diff / MIN)}m`;
-  if (diff < DAY) return `${Math.floor(diff / HOUR)}h`;
-  if (diff < 7 * DAY) return `${Math.floor(diff / DAY)}d`;
-  return new Date(then).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-};
+/** Moments style: "刚刚"-equivalent — "1 minute ago", "3 hours ago", "Yesterday", "12 March". */
+export const momentsTime = (value) => {
+  if (!value) return 'Just now';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Just now';
+  const diff = Date.now() - date.getTime();
 
-/** "Today" / "Yesterday" / "Monday, 12 March" — used for feed day dividers. */
-export const dayLabel = (value) => {
-  const date = new Date(value || Date.now());
-  if (Number.isNaN(date.getTime())) return 'Today';
-  const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOf(new Date()) - startOf(date)) / DAY);
-  if (days <= 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return date.toLocaleDateString(undefined, { weekday: 'long' });
+  if (diff < MIN) return 'Just now';
+  if (diff < HOUR) {
+    const n = Math.floor(diff / MIN);
+    return `${n} minute${n === 1 ? '' : 's'} ago`;
+  }
+  if (diff < DAY) {
+    const n = Math.floor(diff / HOUR);
+    return `${n} hour${n === 1 ? '' : 's'} ago`;
+  }
+  if (diff < 2 * DAY) return 'Yesterday';
+  if (diff < 7 * DAY) {
+    const n = Math.floor(diff / DAY);
+    return `${n} days ago`;
+  }
   return date.toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
 };
 
-export const clockTime = (value) =>
-  new Date(value || Date.now()).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+/** Chat list: time today, "Yesterday", weekday this week, else date. */
+export const chatListTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOf(new Date()) - startOf(date)) / DAY);
+
+  if (days <= 0) return clock(date);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return date.toLocaleDateString(undefined, { weekday: 'short' });
+  return date.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' });
+};
+
+/** In-conversation divider: "HH:MM" today, "Yesterday HH:MM", else full. */
+export const messageStamp = (value) => {
+  const date = new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) return '';
+  const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOf(new Date()) - startOf(date)) / DAY);
+
+  if (days <= 0) return clock(date);
+  if (days === 1) return `Yesterday ${clock(date)}`;
+  return `${date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${clock(date)}`;
+};
+
+/** WeChat only prints a timestamp when messages are >5 min apart. */
+export const shouldStamp = (current, previous) => {
+  if (!previous) return true;
+  const a = new Date(current || Date.now()).getTime();
+  const b = new Date(previous || Date.now()).getTime();
+  return Math.abs(a - b) > 5 * MIN;
+};

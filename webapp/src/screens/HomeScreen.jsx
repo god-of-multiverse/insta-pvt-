@@ -1,42 +1,14 @@
-import PostCard from '../components/PostCard';
+import { useState } from 'react';
+import MomentItem from '../components/PostCard';
 import Icon from '../components/Icon';
-import { circleMeta } from '../lib/circles';
-import { dayLabel } from '../lib/time';
+import Avatar from '../components/Avatar';
 
-const FeedSkeleton = () => (
-  <div className="feed">
-    {[0, 1].map((i) => (
-      <div className="post" key={i}>
-        <div className="post-head">
-          <div className="skeleton" style={{ width: 42, height: 42, borderRadius: '50%' }} />
-          <div style={{ flex: 1 }}>
-            <div className="skeleton" style={{ width: 120, height: 12, marginBottom: 7 }} />
-            <div className="skeleton" style={{ width: 72, height: 10 }} />
-          </div>
-        </div>
-        <div className="skeleton" style={{ height: 320, borderRadius: 0 }} />
-        <div className="post-body">
-          <div className="skeleton" style={{ height: 12, width: '70%', marginBottom: 8 }} />
-          <div className="skeleton" style={{ height: 12, width: '45%' }} />
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-/** Groups posts under Today / Yesterday / weekday headings. */
-const groupByDay = (posts) => {
-  const groups = [];
-  posts.forEach((post) => {
-    const label = dayLabel(post.createdAt);
-    const last = groups[groups.length - 1];
-    if (last && last.label === label) last.posts.push(post);
-    else groups.push({ label, posts: [post] });
-  });
-  return groups;
-};
-
-const HomeScreen = ({
+/**
+ * Moments (朋友圈): cover photo with the user's avatar overhanging its bottom
+ * edge, then a plain white list of entries. The nav bar floats transparently
+ * over the cover, with a camera button on the right.
+ */
+const MomentsScreen = ({
   posts,
   loading,
   activeCircle,
@@ -46,92 +18,87 @@ const HomeScreen = ({
   onDeletePost,
   onCompose,
 }) => {
+  const [filterOpen, setFilterOpen] = useState(false);
   const options = ['All', ...circles];
-  const meta = circleMeta(activeCircle);
-  const groups = groupByDay(posts);
 
   return (
-    <div className="page">
-      <div className="topbar">
-        <div>
-          <h1>{activeCircle === 'All' ? 'Your circles' : activeCircle}</h1>
-          <p className="sub">{meta.blurb}</p>
-        </div>
-        <div className="topbar-actions">
-          <button className="btn btn-ghost" onClick={onCompose}>
-            <Icon name="plus" size={16} />
-            Post
-          </button>
+    <div className="wx-moments">
+      <div className="wx-nav transparent">
+        <span />
+        <div className="wx-nav-title">{activeCircle === 'All' ? '' : activeCircle}</div>
+        <button className="wx-nav-btn right" onClick={onCompose} aria-label="New Moment">
+          <Icon name="camera" size={21} strokeWidth={1.7} />
+        </button>
+      </div>
+
+      <div className="wx-cover">
+        <div className="wx-cover-me">
+          <div className="wx-cover-name">{currentUser?.username || 'you'}</div>
+          <Avatar name={currentUser?.username || 'you'} className="wx-cover-av" />
         </div>
       </div>
 
-      <div className="circle-bar" role="tablist" aria-label="Filter by circle">
-        {options.map((name) => {
-          const item = circleMeta(name);
-          return (
+      {/* Circle filter — WeChat's "who can see" concept surfaced as a strip */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '34px 16px 6px',
+          overflowX: 'auto',
+        }}
+      >
+        <button
+          onClick={() => setFilterOpen((v) => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#576b95', fontSize: 14 }}
+        >
+          <Icon name="group" size={16} />
+          {activeCircle === 'All' ? 'All circles' : activeCircle}
+          <Icon name="chev" size={12} strokeWidth={2} style={{ transform: 'rotate(90deg)' }} />
+        </button>
+      </div>
+
+      {filterOpen && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '4px 16px 10px' }}>
+          {options.map((name) => (
             <button
               key={name}
-              role="tab"
-              aria-selected={activeCircle === name}
-              className={`circle-tab ${activeCircle === name ? 'on' : ''}`}
-              style={{ '--chip-color': item.color }}
-              onClick={() => setActiveCircle(name)}
+              className={`wx-aud-chip ${activeCircle === name ? 'on' : ''}`}
+              onClick={() => {
+                setActiveCircle(name);
+                setFilterOpen(false);
+              }}
             >
-              <span className="dot" />
               {name}
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
       {loading ? (
-        <FeedSkeleton />
+        <div className="wx-loading">
+          <div className="wx-spin" />
+        </div>
       ) : posts.length === 0 ? (
-        <div className="empty">
-          <h3>Nothing here yet</h3>
-          <p>
-            {activeCircle === 'All'
-              ? 'When people in your circles post, it shows up here in the order it happened — and then it stops.'
-              : `No one has posted to ${activeCircle} yet. Be the first; only this circle will see it.`}
-          </p>
-          <button className="btn btn-primary" style={{ marginTop: 22 }} onClick={onCompose}>
-            <Icon name="plus" size={16} />
-            Share something
-          </button>
+        <div className="wx-empty">
+          No Moments yet.
+          <br />
+          Tap the camera to share one.
         </div>
       ) : (
-        <>
-          <div className="feed">
-            {groups.map((group) => (
-              <div key={group.label} className="stack" style={{ gap: 26 }}>
-                <div className="day-rule">{group.label}</div>
-                {group.posts.map((post) => (
-                  <PostCard
-                    key={post._id || post.id}
-                    post={post}
-                    currentUser={currentUser}
-                    onDelete={onDeletePost}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-
-          <p
-            style={{
-              textAlign: 'center',
-              color: 'var(--text-mute)',
-              fontSize: 13,
-              padding: '38px 0 10px',
-              maxWidth: 620,
-            }}
-          >
-            That&apos;s everything. No infinite scroll — go do something else.
-          </p>
-        </>
+        posts.map((post) => (
+          <MomentItem
+            key={post._id || post.id}
+            post={post}
+            currentUser={currentUser}
+            onDelete={onDeletePost}
+          />
+        ))
       )}
+
+      <div style={{ height: 24 }} />
     </div>
   );
 };
 
-export default HomeScreen;
+export default MomentsScreen;

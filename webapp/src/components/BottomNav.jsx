@@ -1,26 +1,36 @@
 import Icon from './Icon';
 
-export const NAV_ITEMS = [
-  { id: 'home', icon: 'home', label: 'Feed' },
-  { id: 'search', icon: 'circles', label: 'Circles' },
-  { id: 'upload', icon: 'compose', label: 'Post', accent: true },
-  { id: 'chat', icon: 'chat', label: 'Chat' },
-  { id: 'profile', icon: 'user', label: 'You' },
+/** WeChat's 4-tab bar: Chats, Contacts, Discover, Me. */
+export const TABS = [
+  { id: 'chat', icon: 'chats', label: 'Chats' },
+  { id: 'contacts', icon: 'contacts', label: 'Contacts' },
+  { id: 'discover', icon: 'discover', label: 'Discover' },
+  { id: 'me', icon: 'me', label: 'Me' },
 ];
 
-const BottomNav = ({ currentScreen, setCurrentScreen }) => (
-  <nav className="tabbar" aria-label="Primary">
-    {NAV_ITEMS.map((item) => (
-      <button
-        key={item.id}
-        className={`tab-btn ${currentScreen === item.id ? 'on' : ''} ${item.accent ? 'accent' : ''}`}
-        onClick={() => setCurrentScreen(item.id)}
-        aria-current={currentScreen === item.id ? 'page' : undefined}
-      >
-        <Icon name={item.icon} size={21} filled={currentScreen === item.id && item.id === 'home'} />
-        {item.label}
-      </button>
-    ))}
+const BottomNav = ({ current, onChange, badges = {} }) => (
+  <nav className="wx-tabbar" aria-label="Primary">
+    {TABS.map((tab) => {
+      const badge = badges[tab.id];
+      return (
+        <button
+          key={tab.id}
+          className={`wx-tab ${current === tab.id ? 'on' : ''}`}
+          onClick={() => onChange(tab.id)}
+          aria-current={current === tab.id ? 'page' : undefined}
+        >
+          <span className="ico">
+            <Icon name={tab.icon} size={26} />
+            {badge ? (
+              <span className={`wx-badge ${badge === true ? 'dot' : ''}`}>
+                {badge === true ? '' : badge}
+              </span>
+            ) : null}
+          </span>
+          {tab.label}
+        </button>
+      );
+    })}
   </nav>
 );
 

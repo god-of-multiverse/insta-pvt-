@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
 import Icon from '../components/Icon';
-import { circleMeta } from '../lib/circles';
 import { useToast } from '../components/Toast';
 
 const MAX_BYTES = 5 * 1024 * 1024;
-const MAX_CAPTION = 600;
 
-const UploadScreen = ({ onUploadSuccess, circles, onAddCircle }) => {
+/**
+ * WeChat's Moments composer: Cancel / Send nav, a big plain textarea, a 3-up
+ * photo picker grid, then "Who can see" rows underneath.
+ */
+const ComposeScreen = ({ onUploadSuccess, circles, onAddCircle, onCancel }) => {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [caption, setCaption] = useState('');
+  const [text, setText] = useState('');
   const [target, setTarget] = useState(circles[0] || 'General');
   const [newCircle, setNewCircle] = useState('');
-  const [dragging, setDragging] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef(null);
   const toast = useToast();
@@ -26,191 +28,150 @@ const UploadScreen = ({ onUploadSuccess, circles, onAddCircle }) => {
 
   const accept = (candidate) => {
     if (!candidate) return;
-    if (!candidate.type.startsWith('image/')) {
-      toast('That file is not an image.', 'error');
-      return;
-    }
-    if (candidate.size > MAX_BYTES) {
-      toast('Images need to be under 5 MB.', 'error');
-      return;
-    }
+    if (!candidate.type.startsWith('image/')) return toast('Please choose an image');
+    if (candidate.size > MAX_BYTES) return toast('Image must be under 5 MB');
     if (preview) URL.revokeObjectURL(preview);
     setFile(candidate);
     setPreview(URL.createObjectURL(candidate));
   };
 
-  const reset = () => {
+  const clearPhoto = () => {
     if (preview) URL.revokeObjectURL(preview);
     setFile(null);
     setPreview(null);
-    setCaption('');
     if (inputRef.current) inputRef.current.value = '';
   };
 
   const addCircle = () => {
-    const name = newCircle.trim();
-    if (!name) return;
-    const normalized = name[0].toUpperCase() + name.slice(1);
+    const value = newCircle.trim();
+    if (!value) return;
+    const normalized = value[0].toUpperCase() + value.slice(1);
     if (!circles.some((c) => c.toLowerCase() === normalized.toLowerCase())) onAddCircle(normalized);
     setTarget(normalized);
     setNewCircle('');
-    toast(`Circle “${normalized}” ready`, 'success');
+    setAdding(false);
   };
 
   const submit = async () => {
-    if (!file) {
-      toast('Pick a photo first.', 'error');
-      return;
-    }
+    if (!file) return toast('Please choose a photo');
     setBusy(true);
     try {
       const formData = new FormData();
       formData.append('image', file);
-      formData.append('caption', caption.trim());
+      formData.append('caption', text.trim());
       formData.append('circle', target);
       const response = await api.postMultipart('/api/posts', formData);
-      if (!response?.post) throw new Error('The server returned an unexpected response.');
-      toast(`Shared with ${target} only`, 'success');
+      if (!response?.post) throw new Error('Unexpected server response');
+      toast('Posted');
       const chosen = target;
-      reset();
+      clearPhoto();
+      setText('');
       onUploadSuccess(response.post, chosen);
     } catch (error) {
-      toast(error.message, 'error');
+      toast(error.message);
     } finally {
       setBusy(false);
     }
   };
 
-  const meta = circleMeta(target);
-
   return (
-    <div className="page">
-      <div className="topbar">
-        <div>
-          <h1>New post</h1>
-          <p className="sub">Pick the audience first. Nothing is shared until you choose.</p>
+    <div style={{ background: '#ededed', minHeight: '100%' }}>
+      <div className="wx-post-nav hair-b">
+        <button className="wx-post-cancel" onClick={onCancel}>
+          Cancel
+        </button>
+        <button className="wx-post-send" onClick={submit} disabled={busy || !file}>
+          {busy ? '…' : 'Send'}
+        </button>
+      </div>
+
+      <div className="wx-post-body">
+        <textarea
+          className="wx-post-text"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder="What's on your mind?"
+        />
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(event) => accept(event.target.files?.[0])}
+        />
+
+        <div className="wx-picker">
+          {preview ? (
+            <div className="wx-picker-item">
+              <img src={preview} alt="Selected" />
+              <button className="wx-picker-x" onClick={clearPhoto} aria-label="Remove photo">
+                <Icon name="close" size={13} strokeWidth={2.4} />
+              </button>
+            </div>
+          ) : (
+            <button className="wx-picker-add" onClick={() => inputRef.current?.click()}>
+              <Icon name="plus" size={30} strokeWidth={1.2} />
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="composer">
-        <div>
-          {!preview ? (
-            <>
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={(event) => accept(event.target.files?.[0])}
-              />
+      <div className="wx-group">
+        <div className="wx-cell hair-b" style={{ display: 'block', paddingTop: 12 }}>
+          <div className="wx-cell-title" style={{ marginBottom: 9 }}>
+            Who can see
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {circles.map((circle) => (
               <button
-                type="button"
-                className={`drop ${dragging ? 'over' : ''}`}
-                onClick={() => inputRef.current?.click()}
-                onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setDragging(false);
-                  accept(event.dataTransfer.files?.[0]);
-                }}
+                key={circle}
+                className={`wx-aud-chip ${target === circle ? 'on' : ''}`}
+                onClick={() => setTarget(circle)}
               >
-                <span className="ring">
-                  <Icon name="image" size={24} />
-                </span>
-                <strong>Drop a photo, or browse</strong>
-                <span>JPG, PNG or WebP · up to 5 MB</span>
+                {circle}
               </button>
-            </>
-          ) : (
-            <div className="preview">
-              <img src={preview} alt="Selected upload preview" />
-              <div className="preview-bar">
-                <button className="icon-btn" onClick={() => inputRef.current?.click()} aria-label="Replace image">
-                  <Icon name="image" size={17} />
+            ))}
+            {adding ? (
+              <span style={{ display: 'flex', gap: 5 }}>
+                <input
+                  autoFocus
+                  value={newCircle}
+                  onChange={(event) => setNewCircle(event.target.value)}
+                  onKeyDown={(event) => event.key === 'Enter' && addCircle()}
+                  onBlur={() => !newCircle.trim() && setAdding(false)}
+                  placeholder="Name"
+                  style={{
+                    width: 96,
+                    padding: '4px 8px',
+                    border: '1px solid #e0e0e0',
+                    borderRadius: 3,
+                    fontSize: 14,
+                    outline: 'none',
+                  }}
+                />
+                <button className="wx-aud-chip" onClick={addCircle}>
+                  Add
                 </button>
-                <button className="icon-btn" onClick={reset} aria-label="Remove image">
-                  <Icon name="close" size={17} />
-                </button>
-              </div>
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={(event) => accept(event.target.files?.[0])}
-              />
-            </div>
-          )}
+              </span>
+            ) : (
+              <button className="wx-aud-chip" onClick={() => setAdding(true)}>
+                + New
+              </button>
+            )}
+          </div>
         </div>
 
-        <aside className="composer-side">
-          <div>
-            <label className="field-label" htmlFor="caption">Caption</label>
-            <textarea
-              id="caption"
-              className="field caption-area"
-              value={caption}
-              maxLength={MAX_CAPTION}
-              onChange={(event) => setCaption(event.target.value)}
-              placeholder="Say the thing you would only say to these people…"
-            />
-            <div className="char-count">{caption.length}/{MAX_CAPTION}</div>
-          </div>
-
-          <div>
-            <span className="field-label">Who sees this</span>
-            <div className="circle-picker">
-              {circles.map((name) => {
-                const item = circleMeta(name);
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    className={`circle-option ${target === name ? 'on' : ''}`}
-                    style={{ '--chip-color': item.color }}
-                    onClick={() => setTarget(name)}
-                  >
-                    <span className="dot" style={{ width: 9, height: 9, borderRadius: '50%', background: item.color }} />
-                    <span className="label">{name}</span>
-                    <Icon name="check" size={16} className="tick" />
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="inline-add" style={{ marginTop: 10 }}>
-              <input
-                className="field"
-                value={newCircle}
-                onChange={(event) => setNewCircle(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && (event.preventDefault(), addCircle())}
-                placeholder="New circle name"
-                aria-label="Create a new circle"
-              />
-              <button type="button" className="btn btn-ghost" onClick={addCircle} disabled={!newCircle.trim()}>
-                Add
-              </button>
-            </div>
-          </div>
-
-          <div className="audience-note">
-            <Icon name="eyeOff" size={15} />
-            <span>{meta.blurb}</span>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-ghost" onClick={reset} disabled={busy || !file}>
-              Clear
-            </button>
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={submit} disabled={busy || !file}>
-              {busy ? <span className="spinner" /> : `Share with ${target}`}
-            </button>
-          </div>
-        </aside>
+        <div className="wx-cell">
+          <span className="wx-cell-body">
+            <span className="wx-cell-title" style={{ fontSize: 15, color: '#888' }}>
+              Only people in {target} will see this
+            </span>
+          </span>
+        </div>
       </div>
     </div>
   );
 };
 
-export default UploadScreen;
+export default ComposeScreen;

@@ -1,178 +1,59 @@
-import { useMemo, useState } from 'react';
 import Icon from '../components/Icon';
-import { circleMeta } from '../lib/circles';
-import { mediaUrl } from '../services/api';
+import Avatar from '../components/Avatar';
 
-const ProfileScreen = ({ currentUser, posts, circles, onLogout }) => {
+/** WeChat's "Me" tab: profile header, then grouped setting rows. */
+const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments }) => {
   const user = currentUser || {};
-  const initial = (user.username || 'U')[0].toUpperCase();
-  const [tab, setTab] = useState('posts');
-  const [quietMode, setQuietMode] = useState(true);
-  const [privateLikes, setPrivateLikes] = useState(true);
-
+  const name = user.username || 'you';
   const myId = String(user._id || user.id || '');
-  const mine = useMemo(
-    () => posts.filter((post) => String(post.user?._id || post.user?.id || post.user || '') === myId),
-    [posts, myId]
+  const mineCount = posts.filter(
+    (post) => String(post.user?._id || post.user?.id || post.user || '') === myId
+  ).length;
+
+  const Row = ({ icon, color, title, value, last, onClick }) => (
+    <button className={`wx-cell ${last ? '' : 'hair-b hair-inset'}`} onClick={onClick}>
+      <span className="wx-cell-ico" style={{ background: color }}>
+        <Icon name={icon} size={16} strokeWidth={1.9} />
+      </span>
+      <span className="wx-cell-body">
+        <span className="wx-cell-title">{title}</span>
+      </span>
+      {value !== undefined && <span className="wx-cell-val">{value}</span>}
+      <Icon name="chev" size={16} strokeWidth={2} className="wx-chev" />
+    </button>
   );
 
   return (
-    <div className="page">
-      <div className="topbar">
-        <div>
-          <h1>You</h1>
-          <p className="sub">Nothing on this page is visible to anyone outside your circles.</p>
+    <>
+      <div className="wx-me-head hair-b">
+        <Avatar name={name} size="lg" />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="wx-me-name">{name}</div>
+          <div className="wx-me-id">Inasta ID: {user.email || name}</div>
         </div>
-        <div className="topbar-actions">
-          <button className="btn btn-ghost" onClick={onLogout}>
-            <Icon name="logout" size={16} />
-            Log out
-          </button>
+        <div className="wx-qr">
+          <Icon name="qr" size={17} />
+          <Icon name="chev" size={15} strokeWidth={2} />
         </div>
       </div>
 
-      <section className="profile-hero">
-        <div className="avatar avatar-xl">{initial}</div>
-        <div className="profile-id">
-          <h2>{user.username || 'you'}</h2>
-          <div className="handle">{user.email || 'no email on file'}</div>
-          <p className="bio">{user.bio || 'No bio — and no one is waiting for one.'}</p>
-          <div className="stat-row">
-            <div className="stat">
-              <div className="num">{mine.length}</div>
-              <div className="lbl">Posts</div>
-            </div>
-            <div className="stat">
-              <div className="num">{circles.length}</div>
-              <div className="lbl">Circles</div>
-            </div>
-            <div className="stat">
-              <div className="num">
-                <Icon name="lock" size={20} />
-              </div>
-              <div className="lbl">Private</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="tabs" role="tablist">
-        {[
-          ['posts', 'Posts'],
-          ['circles', 'Circles'],
-          ['settings', 'Settings'],
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            role="tab"
-            aria-selected={tab === key}
-            className={`tab ${tab === key ? 'on' : ''}`}
-            onClick={() => setTab(key)}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="wx-group">
+        <Row icon="image" color="#07c160" title="Moments" value={mineCount} onClick={onOpenMoments} />
+        <Row icon="group" color="#576b95" title="My Circles" value={circles.length} last />
       </div>
 
-      {tab === 'posts' &&
-        (mine.length === 0 ? (
-          <div className="empty">
-            <h3>You haven&apos;t posted yet</h3>
-            <p>Whatever you share goes to exactly one circle. Nowhere else, ever.</p>
-          </div>
-        ) : (
-          <div className="photo-grid">
-            {mine.map((post) => {
-              const meta = circleMeta(post.circle);
-              return (
-                <div className="photo-tile" key={post._id || post.id}>
-                  <img src={mediaUrl(post.image)} alt={post.caption || 'Your post'} loading="lazy" />
-                  <span className="tag" style={{ color: meta.color }}>
-                    {meta.name}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        ))}
+      <div className="wx-group">
+        <Row icon="lock" color="#5a8fd6" title="Privacy" value="Private" />
+        <Row icon="smile" color="#fa9d3b" title="Stickers" last />
+      </div>
 
-      {tab === 'circles' && (
-        <div className="circle-grid">
-          {circles.map((name) => {
-            const meta = circleMeta(name);
-            const count = posts.filter((post) => post.circle === name).length;
-            return (
-              <article className="circle-card" key={name}>
-                <div className="circle-card-top">
-                  <div>
-                    <h3>{name}</h3>
-                    <span className="sub">{count} {count === 1 ? 'post' : 'posts'}</span>
-                  </div>
-                  <span className="chip chip-solid" style={{ '--chip-color': meta.color }}>
-                    <span className="dot" />
-                    Private
-                  </span>
-                </div>
-                <p style={{ fontSize: 13.5, color: 'var(--text-mute)' }}>{meta.blurb}</p>
-              </article>
-            );
-          })}
-        </div>
-      )}
+      <button className="wx-logout" onClick={onLogout}>
+        Log Out
+      </button>
 
-      {tab === 'settings' && (
-        <div className="stack">
-          <div className="setting-row">
-            <Icon name="lock" size={19} />
-            <div className="txt">
-              <strong>Private account</strong>
-              <span>Always on. Inasta has no public profiles — this cannot be turned off.</span>
-            </div>
-            <div className="switch on" aria-hidden="true">
-              <div className="knob" />
-            </div>
-          </div>
-
-          <div className="setting-row">
-            <Icon name="heart" size={19} />
-            <div className="txt">
-              <strong>Hide like counts</strong>
-              <span>Nobody sees how many likes a post received, including you.</span>
-            </div>
-            <button
-              className={`switch ${privateLikes ? 'on' : ''}`}
-              onClick={() => setPrivateLikes((v) => !v)}
-              aria-pressed={privateLikes}
-              aria-label="Toggle hidden like counts"
-            >
-              <div className="knob" />
-            </button>
-          </div>
-
-          <div className="setting-row">
-            <Icon name="clock" size={19} />
-            <div className="txt">
-              <strong>Quiet mode</strong>
-              <span>Batch every notification into one digest a day instead of pinging you.</span>
-            </div>
-            <button
-              className={`switch ${quietMode ? 'on' : ''}`}
-              onClick={() => setQuietMode((v) => !v)}
-              aria-pressed={quietMode}
-              aria-label="Toggle quiet mode"
-            >
-              <div className="knob" />
-            </button>
-          </div>
-
-          <button className="btn btn-ghost" onClick={onLogout} style={{ justifySelf: 'start' }}>
-            <Icon name="logout" size={16} />
-            Log out of Inasta
-          </button>
-        </div>
-      )}
-    </div>
+      <div style={{ height: 20 }} />
+    </>
   );
 };
 
-export default ProfileScreen;
+export default MeScreen;
