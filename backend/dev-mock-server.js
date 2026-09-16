@@ -13,6 +13,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
+const fs = require('fs');
 const multer = require('multer');
 
 const app = express();
@@ -180,7 +181,19 @@ app.post('/api/group-messages', auth, (req, res) => {
   res.status(201).json(message);
 });
 
-app.get('/', (req, res) => res.json({ message: 'Inasta mock API (in-memory)' }));
+// Serve the built web client from this same origin when it exists, so the
+// whole app runs on one port with no dev-server websocket to go stale.
+const clientDist = path.join(__dirname, '..', 'webapp', 'dist');
+if (fs.existsSync(path.join(clientDist, 'index.html'))) {
+  app.use(express.static(clientDist));
+  // SPA fallback: anything that is not /api or /uploads returns index.html
+  app.get(/^(?!\/(api|uploads)\/).*/, (req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+  console.log('📦 Serving built client from webapp/dist');
+} else {
+  app.get('/', (req, res) => res.json({ message: 'Inasta mock API (in-memory)' }));
+}
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
