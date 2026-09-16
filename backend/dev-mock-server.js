@@ -32,8 +32,9 @@ app.use(express.json());
 if (!process.env.QUIET) {
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) {
-      const hdr = req.header('Authorization') || '';
-      const tag = hdr.startsWith('Bearer ') ? 'auth' : 'NO-TOKEN';
+      const bearer = (req.header('Authorization') || '').startsWith('Bearer ');
+      const alt = !!req.header('X-Auth-Token');
+      const tag = bearer ? (alt ? 'auth+alt' : 'auth-only') : alt ? 'ALT-ONLY(proxy stripped auth)' : 'NO-TOKEN';
       console.log(`→ ${req.method} ${req.path} [${tag}]`);
     }
     next();
@@ -178,13 +179,27 @@ if (!load()) seed();
 const sign = (user) => jwt.sign({ userId: user._id }, SECRET, { expiresIn: '30d' });
 const findUser = (uid) => db.users.find((u) => u._id === uid);
 
-function auth(req, res, next) {
+/**
+ * Extracts the bearer token, tolerating proxies that consume the standard
+ * Authorization header. Falls back to X-Auth-Token, then a `token` query
+ * param, so the client can always get credentials through.
+ */
+function readToken(req) {
   const header = req.header('Authorization') || '';
-  if (!header.startsWith('Bearer ')) {
+  if (header.startsWith('Bearer ')) return header.slice(7).trim();
+  const alt = req.header('X-Auth-Token') || req.header('x-auth-token');
+  if (alt) return alt.trim();
+  if (req.query && typeof req.query.token === 'string') return req.query.token.trim();
+  return '';
+}
+
+function auth(req, res, next) {
+  const token = readToken(req);
+  if (!token) {
     return res.status(401).json({ error: 'Access denied. No token provided.' });
   }
   try {
-    const { userId } = jwt.verify(header.slice(7), SECRET);
+    const { userId } = jwt.verify(token, SECRET);
     const user = findUser(userId);
     if (!user) return res.status(401).json({ error: 'Account no longer exists.' });
     if (user.isBanned) {

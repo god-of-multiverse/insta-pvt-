@@ -83,7 +83,14 @@ const getHeaders = (isMultipart = false) => {
   const headers = {};
   if (!isMultipart) headers['Content-Type'] = 'application/json';
   const token = session.token;
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+    // Some reverse proxies (including sandbox/preview tunnels) consume or strip
+    // the Authorization header for their own auth, so the backend sees an
+    // unauthenticated request. Send the same token under a second, neutral
+    // name that nothing else claims; the API accepts either.
+    headers['X-Auth-Token'] = token;
+  }
   return headers;
 };
 
