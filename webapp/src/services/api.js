@@ -1,17 +1,47 @@
-const BASE_URL = 'http://localhost:5000';
+// Same-origin by default: the dev server (and any production reverse proxy)
+// forwards /api and /uploads to the Express backend. This keeps the browser
+// from ever having to know the backend's host, which is what broke the app
+// whenever it was opened from anything other than the dev machine itself.
+// Override with VITE_API_URL only if the API lives on a different origin.
+const readApiOrigin = () => {
+  try {
+    return import.meta.env.VITE_API_URL || '';
+  } catch {
+    return '';
+  }
+};
+
+const BASE_URL = readApiOrigin().replace(/\/$/, '');
+
+const TOKEN_KEY = 'inasta.token';
+const USER_KEY = 'inasta.user';
+
+export const session = {
+  get token() {
+    return localStorage.getItem(TOKEN_KEY) || localStorage.getItem('token');
+  },
+  get user() {
+    const raw = localStorage.getItem(USER_KEY) || localStorage.getItem('user');
+    try {
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  },
+  save(token, user) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  },
+  clear() {
+    [TOKEN_KEY, USER_KEY, 'token', 'user'].forEach((key) => localStorage.removeItem(key));
+  },
+};
 
 const getHeaders = (isMultipart = false) => {
-  const token = localStorage.getItem('token');
   const headers = {};
-  
-  if (!isMultipart) {
-    headers['Content-Type'] = 'application/json';
-  }
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
+  if (!isMultipart) headers['Content-Type'] = 'application/json';
+  const token = session.token;
+  if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 };
 
@@ -19,50 +49,40 @@ const handleResponse = async (response) => {
   const text = await response.text();
   let data;
   try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error(text || 'Server error occurred');
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error('The server is unreachable. Is the API running?');
   }
 
   if (!response.ok) {
-    throw new Error(data.error || 'Something went wrong');
+    if (response.status === 401) session.clear();
+    throw new Error(data.error || data.message || `Request failed (${response.status})`);
   }
-
   return data;
 };
 
-export const api = {
-  get: async (endpoint) => {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      method: 'GET',
-      headers: getHeaders()
-    });
-    return handleResponse(response);
-  },
-
-  post: async (endpoint, body) => {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(body)
-    });
-    return handleResponse(response);
-  },
-
-  postMultipart: async (endpoint, formData) => {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: getHeaders(true), // Do not set Content-Type header so the browser sets it automatically with standard boundary
-      body: formData
-    });
-    return handleResponse(response);
-  },
-
-  delete: async (endpoint) => {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers: getHeaders()
-    });
-    return handleResponse(response);
+const request = async (endpoint, options = {}) => {
+  try {
+    const response = await fetch(`${BASE_URL}${endpoint}`, options);
+    return await handleResponse(response);
+  } catch (error) {
+    if (error instanceof TypeError) throw new Error('Network error — cannot reach the Inasta API.');
+    throw error;
   }
+};
+
+/** Media stored by the API is returned as a relative path; make it loadable. */
+export const mediaUrl = (src) => {
+  if (!src) return '';
+  if (/^(https?:|data:|blob:)/.test(src)) return src;
+  return `${BASE_URL}${src.startsWith('/') ? '' : '/'}${src}`;
+};
+
+export const api = {
+  get: (endpoint) => request(endpoint, { method: 'GET', headers: getHeaders() }),
+  post: (endpoint, body) =>
+    request(endpoint, { method: 'POST', headers: getHeaders(), body: JSON.stringify(body) }),
+  postMultipart: (endpoint, formData) =>
+    request(endpoint, { method: 'POST', headers: getHeaders(true), body: formData }),
+  delete: (endpoint) => request(endpoint, { method: 'DELETE', headers: getHeaders() }),
 };

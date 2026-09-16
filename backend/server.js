@@ -13,8 +13,11 @@ const groupRoutes = require('./routes/groups');
 const groupMessageRoutes = require('./routes/groupMessages');
 const errorHandler = require('./middleware/errorHandler');
 
-// Initialize database connection
-connectDB();
+// Initialize database connection (skipped when another entrypoint owns the connection,
+// e.g. dev-server.js which can fall back to an in-memory MongoDB)
+if (require.main === module) {
+  connectDB();
+}
 
 const app = express();
 
