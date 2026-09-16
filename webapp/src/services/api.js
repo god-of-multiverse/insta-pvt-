@@ -16,12 +16,54 @@ const BASE_URL = readApiOrigin().replace(/\/$/, '');
 const TOKEN_KEY = 'inasta.token';
 const USER_KEY = 'inasta.user';
 
+/**
+ * Storage that cannot fail.
+ *
+ * Browsers throw a SecurityError on localStorage when the page is embedded in
+ * a cross-origin iframe with third-party storage blocked — which is how the
+ * preview panel loads the app, and how many in-app browsers behave. If we let
+ * that throw, the token is never saved and every subsequent request goes out
+ * unauthenticated, producing "Access denied. No token provided."
+ *
+ * So every access is guarded, and we keep an in-memory mirror that carries the
+ * session for the life of the tab even when persistence is unavailable.
+ */
+const memory = new Map();
+
+export const safeStorage = {
+  get(key) {
+    try {
+      const value = localStorage.getItem(key);
+      if (value !== null) return value;
+    } catch {
+      /* storage blocked — fall through to memory */
+    }
+    return memory.has(key) ? memory.get(key) : null;
+  },
+  set(key, value) {
+    memory.set(key, value);
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* storage blocked — the in-memory copy is enough for this tab */
+    }
+  },
+  remove(key) {
+    memory.delete(key);
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* nothing to do */
+    }
+  },
+};
+
 export const session = {
   get token() {
-    return localStorage.getItem(TOKEN_KEY) || localStorage.getItem('token');
+    return safeStorage.get(TOKEN_KEY) || safeStorage.get('token');
   },
   get user() {
-    const raw = localStorage.getItem(USER_KEY) || localStorage.getItem('user');
+    const raw = safeStorage.get(USER_KEY) || safeStorage.get('user');
     try {
       return raw ? JSON.parse(raw) : null;
     } catch {
@@ -29,11 +71,11 @@ export const session = {
     }
   },
   save(token, user) {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    safeStorage.set(TOKEN_KEY, token);
+    safeStorage.set(USER_KEY, JSON.stringify(user));
   },
   clear() {
-    [TOKEN_KEY, USER_KEY, 'token', 'user'].forEach((key) => localStorage.removeItem(key));
+    [TOKEN_KEY, USER_KEY, 'token', 'user'].forEach((key) => safeStorage.remove(key));
   },
 };
 

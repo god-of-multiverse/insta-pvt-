@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import './src/App.css';
 
-import { api, session } from './src/services/api';
+import { api, session, safeStorage } from './src/services/api';
 import { DEFAULT_CIRCLES } from './src/lib/circles';
 import { ToastProvider, useToast } from './src/components/Toast';
 import BottomNav, { TABS } from './src/components/BottomNav';
@@ -21,7 +21,7 @@ const CIRCLES_KEY = 'inasta.circles';
 
 const readStoredCircles = () => {
   try {
-    const raw = JSON.parse(localStorage.getItem(CIRCLES_KEY));
+    const raw = JSON.parse(safeStorage.get(CIRCLES_KEY));
     return Array.isArray(raw) && raw.length ? raw : DEFAULT_CIRCLES;
   } catch {
     return DEFAULT_CIRCLES;
@@ -46,7 +46,7 @@ function Shell() {
   const isLoggedIn = Boolean(currentUser && session.token);
 
   useEffect(() => {
-    localStorage.setItem(CIRCLES_KEY, JSON.stringify(circles));
+    safeStorage.set(CIRCLES_KEY, JSON.stringify(circles));
   }, [circles]);
 
   const loadPosts = useCallback(async () => {
