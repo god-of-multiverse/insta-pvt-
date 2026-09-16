@@ -42,6 +42,16 @@ Both listen on `http://0.0.0.0:5000`. Delete `backend/.mock-data.json` to reseed
 | `mira@inasta.app` | user | free |
 | `kai@inasta.app` | user | pro |
 
+Run the test suite (no database required — it drives the mock server):
+
+```bash
+npm test
+```
+
+It covers the things that must not regress: feed authentication, circle
+visibility, owner-only circle management, admin authorisation, and that a token
+survives a server restart.
+
 ### 2. Web client
 
 ```bash
@@ -68,6 +78,15 @@ process. Rebuild after any client change; no server restart needed.
 cd mobile
 npm install
 npx expo start
+```
+
+The API origin is resolved from `EXPO_PUBLIC_API_URL`, then `extra.apiUrl` in
+`app.json`, then the Expo dev server's own LAN host — so a physical device
+reaches your machine instead of its own localhost. Point it somewhere explicit
+with:
+
+```bash
+EXPO_PUBLIC_API_URL=http://192.168.1.50:5000 npx expo start
 ```
 
 ## Features
@@ -154,14 +173,14 @@ Copy `backend/.env.example` to `backend/.env` and fill in fresh values.
 | Stories | `GET` / `POST /api/stories`, view, screenshot, viewers, delete |
 | Notifications | `GET /api/notifications`, `POST /api/notifications/read` |
 | Admin | `GET /api/admin/stats`, user directory, moderation |
+| Circle management | `GET`/`POST /api/circles`, add/remove members, delete — owner-only |
 
 ### Known gaps
 
-- **Circle management has no UI.** The model and enforcement exist, and circles are
-  created implicitly when you post to a name, but adding and removing members is not yet
-  exposed — it currently requires writing to the database directly.
-- **Streaks** — `Streak` model exists with no controller or routes.
-- **`mobile/src/services/api.js` hardcodes `http://localhost:5000`**, so the Expo client
-  only works in a simulator on the same machine.
-- **No automated tests.** Verification so far has been manual plus scripted DOM runs
-  against the built bundle.
+- **Streak** — the `Streak` model exists with no controller or routes.
+- **Test coverage is auth and privacy only.** `backend/test/security.test.js`
+  covers the feed, circle visibility, circle management and admin boundaries;
+  posting, messaging and stories have no automated tests yet.
+- **`main` still contains the leaked `.env`** at its initial commit. The
+  `arena/*` branch history has been purged, but `main` has not — see the
+  warning above.

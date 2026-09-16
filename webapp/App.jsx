@@ -15,6 +15,7 @@ import ChatScreen from './src/screens/ChatScreen';
 import AdminScreen from './src/screens/AdminScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import SavedScreen from './src/screens/SavedScreen';
+import CirclesScreen from './src/screens/CirclesScreen';
 import { StoryViewer, StoryComposer } from './src/components/Stories';
 
 const CIRCLES_KEY = 'inasta.circles';
@@ -183,6 +184,16 @@ function Shell() {
     );
   }
 
+  if (overlay === 'circles') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body">
+          <CirclesScreen onBack={() => setOverlay(null)} />
+        </div>
+      </div>
+    );
+  }
+
   if (overlay === 'saved') {
     return (
       <div className="wx-shell">
@@ -297,6 +308,7 @@ function Shell() {
             onLogout={logout}
             onOpenMoments={() => setOverlay('moments')}
             onOpenAdmin={() => setOverlay('admin')}
+            onOpenCircles={() => setOverlay('circles')}
             onOpenNotifications={() => setOverlay('notifications')}
             unread={unread}
           />

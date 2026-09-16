@@ -794,7 +794,88 @@ app.delete('/api/admin/posts/:id', auth, adminOnly, (req, res) => {
   res.json({ message: 'Post removed' });
 });
 
+/* --------------------------------------------------------------- circles -- */
+
+const shapeCircle = (c) => ({
+  _id: c._id,
+  name: c.name,
+  members: (c.members || []).map((mid) => {
+    const u = findUser(mid);
+    return u ? { _id: u._id, username: u.username } : { _id: mid };
+  }),
+  memberCount: (c.members || []).length,
+  postCount: db.posts.filter(
+    (p) => String(p.user._id) === String(c.owner) && p.circle === c.name
+  ).length,
+});
+
+app.get('/api/circles', auth, (req, res) => {
+  const mine = (db.circles || [])
+    .filter((c) => String(c.owner) === String(req.user._id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  res.json({ circles: mine.map(shapeCircle) });
+});
+
+app.post('/api/circles', auth, (req, res) => {
+  const name = (req.body?.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'A circle needs a name' });
+  const clash = (db.circles || []).some(
+    (c) => String(c.owner) === String(req.user._id) && c.name === name
+  );
+  if (clash) return res.status(400).json({ error: 'You already have a circle with that name' });
+
+  const circle = { _id: id(), owner: req.user._id, name, members: [] };
+  db.circles.push(circle);
+  if (!req.user.circles.includes(name)) req.user.circles.push(name);
+  save();
+  res.status(201).json({ circle: shapeCircle(circle) });
+});
+
+app.post('/api/circles/:id/members', auth, (req, res) => {
+  const circle = (db.circles || []).find((c) => c._id === req.params.id);
+  if (!circle) return res.status(404).json({ error: 'Circle not found' });
+  if (String(circle.owner) !== String(req.user._id)) {
+    return res.status(403).json({ error: 'Only the owner can change this circle' });
+  }
+  const username = (req.body?.username || '').trim();
+  const user = db.users.find((u) => u.username === username);
+  if (!user) return res.status(404).json({ error: 'No such user' });
+  if (user._id === req.user._id) {
+    return res.status(400).json({ error: 'You are always in your own circles' });
+  }
+  if (circle.members.includes(user._id)) {
+    return res.status(400).json({ error: `${username} is already in this circle` });
+  }
+  circle.members.push(user._id);
+  save();
+  res.json({ circle: shapeCircle(circle), addedUser: pub(user) });
+});
+
+app.delete('/api/circles/:id/members/:userId', auth, (req, res) => {
+  const circle = (db.circles || []).find((c) => c._id === req.params.id);
+  if (!circle) return res.status(404).json({ error: 'Circle not found' });
+  if (String(circle.owner) !== String(req.user._id)) {
+    return res.status(403).json({ error: 'Only the owner can change this circle' });
+  }
+  circle.members = circle.members.filter((m) => String(m) !== String(req.params.userId));
+  save();
+  res.json({ circle: shapeCircle(circle) });
+});
+
+app.delete('/api/circles/:id', auth, (req, res) => {
+  const idx = (db.circles || []).findIndex((c) => c._id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Circle not found' });
+  if (String(db.circles[idx].owner) !== String(req.user._id)) {
+    return res.status(403).json({ error: 'Only the owner can delete this circle' });
+  }
+  const [gone] = db.circles.splice(idx, 1);
+  req.user.circles = req.user.circles.filter((n) => n !== gone.name);
+  save();
+  res.json({ message: 'Circle deleted' });
+});
+
 /* ---------------------------------------------------------- static client -- */
+
 
 const clientDist = path.join(__dirname, '..', 'webapp', 'dist');
 if (fs.existsSync(path.join(clientDist, 'index.html'))) {

@@ -2,7 +2,7 @@ import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 
 /** WeChat's "Me" tab: profile header, then grouped setting rows. */
-const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpenAdmin, onOpenNotifications, unread }) => {
+const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpenAdmin, onOpenCircles, onOpenNotifications, unread }) => {
   const user = currentUser || {};
   const name = user.username || 'you';
   const myId = String(user._id || user.id || '');
@@ -46,7 +46,14 @@ const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpen
 
       <div className="wx-group">
         <Row icon="image" color="#07c160" title="Moments" value={mineCount} onClick={onOpenMoments} />
-        <Row icon="group" color="#576b95" title="My Circles" value={circles.length} last />
+        <Row
+          icon="group"
+          color="#576b95"
+          title="My Circles"
+          value={circles.length}
+          onClick={onOpenCircles}
+          last
+        />
       </div>
 
       {(user.role === 'admin' || user.role === 'moderator') && (
