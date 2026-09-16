@@ -26,6 +26,19 @@ const multer = require('multer');
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Request log. Set QUIET=1 to silence. Showing whether a call carried a token
+// makes auth problems obvious at a glance instead of guessable.
+if (!process.env.QUIET) {
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      const hdr = req.header('Authorization') || '';
+      const tag = hdr.startsWith('Bearer ') ? 'auth' : 'NO-TOKEN';
+      console.log(`→ ${req.method} ${req.path} [${tag}]`);
+    }
+    next();
+  });
+}
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const upload = multer({ dest: path.join(__dirname, 'uploads') });
@@ -742,8 +755,25 @@ app.delete('/api/admin/posts/:id', auth, adminOnly, (req, res) => {
 
 const clientDist = path.join(__dirname, '..', 'webapp', 'dist');
 if (fs.existsSync(path.join(clientDist, 'index.html'))) {
-  app.use(express.static(clientDist));
+  // Hashed asset filenames are safe to cache forever, but index.html must
+  // never be cached: a stale shell keeps pointing browsers at a bundle that
+  // no longer exists (or worse, an old one that still does), which is exactly
+  // how a fixed client keeps behaving like the broken one.
+  app.use(
+    express.static(clientDist, {
+      etag: false,
+      lastModified: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-store, must-revalidate');
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    })
+  );
   app.get(/^(?!\/(api|uploads)\/).*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
     res.sendFile(path.join(clientDist, 'index.html'));
   });
   console.log('📦 Serving built client from webapp/dist');
