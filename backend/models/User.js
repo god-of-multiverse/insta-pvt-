@@ -2,66 +2,45 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-  username: {
-    type: String,
-    required: true,
-    unique: true,
-    minlength: 3
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  password: {
-    type: String,
-    required: true,
-    minlength: 6
-  },
-  profilePicture: {
-    type: String,
-    default: ''
-  },
-  bio: {
-    type: String,
-    default: ''
-  },
-  isPrivate: {
-    type: Boolean,
-    default: true
-  },
-  circles: {
-    type: [String],
-    default: ['General', 'Hometown', 'College']
-  },
-  followers: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  following: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+  username: { type: String, required: true, unique: true, minlength: 3 },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true, minlength: 6 },
+  profilePicture: { type: String, default: '' },
+  bio: { type: String, default: '' },
+  isPrivate: { type: Boolean, default: true },
+
+  // ---- Roles & moderation -------------------------------------------------
+  role: { type: String, enum: ['user', 'moderator', 'admin'], default: 'user' },
+  isVerified: { type: Boolean, default: false },
+  isBanned: { type: Boolean, default: false },
+  banReason: { type: String, default: '' },
+
+  // ---- Monetisation -------------------------------------------------------
+  plan: { type: String, enum: ['free', 'plus', 'pro'], default: 'free' },
+  planSince: { type: Date, default: null },
+
+  // ---- Social graph -------------------------------------------------------
+  circles: { type: [String], default: ['General', 'Hometown', 'College'] },
+  followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  blocked: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  savedPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
+  closeFriends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
+  // ---- Presence -----------------------------------------------------------
+  lastSeen: { type: Date, default: Date.now },
+
+  createdAt: { type: Date, default: Date.now },
 });
 
-// Hash password before saving
-userSchema.pre('save', async function() {
+userSchema.pre('save', async function hashPassword() {
   if (!this.isModified('password')) return;
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-  } catch (error) {
-    throw error;
-  }
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
 });
 
-// Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+userSchema.methods.comparePassword = async function comparePassword(candidate) {
+  return bcrypt.compare(candidate, this.password);
 };
 
 module.exports = mongoose.model('User', userSchema);

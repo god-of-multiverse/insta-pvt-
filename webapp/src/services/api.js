@@ -55,7 +55,12 @@ const handleResponse = async (response) => {
   }
 
   if (!response.ok) {
-    if (response.status === 401) session.clear();
+    // Only a genuinely rejected token ends the session. A transient 401 from a
+    // background poll must never silently sign the user out.
+    if (response.status === 401 && session.token) {
+      session.clear();
+      window.dispatchEvent(new CustomEvent('inasta:signed-out'));
+    }
     throw new Error(data.error || data.message || `Request failed (${response.status})`);
   }
   return data;
@@ -82,6 +87,8 @@ export const api = {
   get: (endpoint) => request(endpoint, { method: 'GET', headers: getHeaders() }),
   post: (endpoint, body) =>
     request(endpoint, { method: 'POST', headers: getHeaders(), body: JSON.stringify(body) }),
+  patch: (endpoint, body) =>
+    request(endpoint, { method: 'PATCH', headers: getHeaders(), body: JSON.stringify(body) }),
   postMultipart: (endpoint, formData) =>
     request(endpoint, { method: 'POST', headers: getHeaders(true), body: formData }),
   delete: (endpoint) => request(endpoint, { method: 'DELETE', headers: getHeaders() }),

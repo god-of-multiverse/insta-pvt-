@@ -11,6 +11,9 @@ const postRoutes = require('./routes/posts');
 const messageRoutes = require('./routes/messages');
 const groupRoutes = require('./routes/groups');
 const groupMessageRoutes = require('./routes/groupMessages');
+const socialRoutes = require('./routes/social');
+const storyRoutes = require('./routes/stories');
+const adminRoutes = require('./routes/admin');
 const errorHandler = require('./middleware/errorHandler');
 
 // Initialize database connection (skipped when another entrypoint owns the connection,
@@ -46,6 +49,9 @@ app.use('/api/posts', postRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/group-messages', groupMessageRoutes);
+app.use('/api', socialRoutes);
+app.use('/api/stories', storyRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health Check
 app.get('/', (req, res) => {

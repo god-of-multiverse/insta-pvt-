@@ -2,26 +2,32 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import Avatar from './Avatar';
 import { momentsTime } from '../lib/time';
-import { mediaUrl } from '../services/api';
+import { api, mediaUrl } from '../services/api';
+import { useToast } from './Toast';
 
 /**
  * A single Moments entry: avatar on the left, everything else in a right column.
  * The dots button opens WeChat's dark Like / Comment popover, and likes and
  * comments share one grey panel underneath.
+ *
+ * Likes, comments and saves are persisted through the API.
  */
 const MomentItem = ({ post, currentUser, onDelete }) => {
   const author = post.user || {};
   const name = author.username || 'Unknown';
+  const postId = post._id || post.id;
+  const toast = useToast();
 
   const [liked, setLiked] = useState(Boolean(post.isLiked));
-  const [likers, setLikers] = useState(post.likers || []);
+  const [likeCount, setLikeCount] = useState(post.likesCount ?? (post.likes || []).length);
+  const [saved, setSaved] = useState(Boolean(post.isSaved));
   const [comments, setComments] = useState(Array.isArray(post.comments) ? post.comments : []);
   const [popOpen, setPopOpen] = useState(false);
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
   const popRef = useRef(null);
 
-  const postId = post._id || post.id;
   const myName = currentUser?.username || 'you';
   const isMine =
     String(author._id || author.id || post.user || '') ===
@@ -36,26 +42,66 @@ const MomentItem = ({ post, currentUser, onDelete }) => {
     return () => document.removeEventListener('mousedown', close);
   }, [popOpen]);
 
-  const toggleLike = () => {
-    setLiked((wasLiked) => {
-      setLikers((prev) => (wasLiked ? prev.filter((n) => n !== myName) : [...prev, myName]));
-      return !wasLiked;
-    });
+  const toggleLike = async () => {
     setPopOpen(false);
+    // optimistic
+    const next = !liked;
+    setLiked(next);
+    setLikeCount((c) => c + (next ? 1 : -1));
+    try {
+      const r = await api.post(`/api/posts/${postId}/like`, {});
+      setLiked(r.liked);
+      setLikeCount(r.likesCount);
+    } catch (error) {
+      setLiked(!next);
+      setLikeCount((c) => c + (next ? -1 : 1));
+      toast(error.message);
+    }
   };
 
-  const submitReply = (event) => {
+  const toggleSave = async () => {
+    setPopOpen(false);
+    const next = !saved;
+    setSaved(next);
+    try {
+      const r = await api.post(`/api/posts/${postId}/save`, {});
+      setSaved(r.saved);
+      toast(r.saved ? 'Saved' : 'Removed from saved');
+    } catch (error) {
+      setSaved(!next);
+      toast(error.message);
+    }
+  };
+
+  const submitReply = async (event) => {
     event.preventDefault();
     const text = draft.trim();
-    if (!text) return;
-    setComments((prev) => [...prev, { _id: `local-${Date.now()}`, user: { username: myName }, text }]);
-    setDraft('');
-    setReplying(false);
+    if (!text || busy) return;
+    setBusy(true);
+    try {
+      const r = await api.post(`/api/posts/${postId}/comments`, { text });
+      setComments((prev) => [...prev, r.comment]);
+      setDraft('');
+      setReplying(false);
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeComment = async (commentId) => {
+    try {
+      await api.delete(`/api/posts/${postId}/comments/${commentId}`);
+      setComments((prev) => prev.filter((c) => c._id !== commentId));
+    } catch (error) {
+      toast(error.message);
+    }
   };
 
   const images = post.images?.length ? post.images : post.image ? [post.image] : [];
   const gridClass = images.length === 1 ? 'n1' : images.length === 3 || images.length > 4 ? 'n3' : 'n2';
-  const hasSocial = likers.length > 0 || comments.length > 0;
+  const hasSocial = likeCount > 0 || comments.length > 0;
 
   return (
     <div className="wx-moment hair-b hair-inset">
@@ -106,6 +152,10 @@ const MomentItem = ({ post, currentUser, onDelete }) => {
                   <Icon name="comment" size={15} />
                   Comment
                 </button>
+                <button onClick={toggleSave}>
+                  <Icon name="qr" size={15} />
+                  {saved ? 'Unsave' : 'Save'}
+                </button>
               </div>
             )}
           </div>
@@ -113,22 +163,39 @@ const MomentItem = ({ post, currentUser, onDelete }) => {
 
         {hasSocial && (
           <div className="wx-social">
-            {likers.length > 0 && (
+            {likeCount > 0 && (
               <div className="wx-likes">
                 <Icon name="heart" size={14} />
-                <span className="wx-likes-names">{likers.join(', ')}</span>
+                <span className="wx-likes-names">
+                  {liked
+                    ? likeCount === 1
+                      ? myName
+                      : `${myName} and ${likeCount - 1} other${likeCount > 2 ? 's' : ''}`
+                    : `${likeCount} like${likeCount === 1 ? '' : 's'}`}
+                </span>
               </div>
             )}
-            {likers.length > 0 && comments.length > 0 && <div className="wx-social-split" />}
+            {likeCount > 0 && comments.length > 0 && <div className="wx-social-split" />}
             {comments.length > 0 && (
               <div className="wx-comments">
-                {comments.map((comment) => (
-                  <div className="wx-comment" key={comment._id}>
-                    <b>{comment.user?.username || 'someone'}</b>
-                    {': '}
-                    {comment.text}
-                  </div>
-                ))}
+                {comments.map((comment) => {
+                  const mine = comment.user?.username === myName;
+                  return (
+                    <div className="wx-comment" key={comment._id}>
+                      <b>{comment.user?.username || 'someone'}</b>
+                      {': '}
+                      {comment.text}
+                      {(mine || isMine) && (
+                        <button
+                          onClick={() => removeComment(comment._id)}
+                          style={{ marginLeft: 6, fontSize: 12, color: '#b2b2b2' }}
+                        >
+                          delete
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -144,7 +211,7 @@ const MomentItem = ({ post, currentUser, onDelete }) => {
               placeholder="Comment"
               aria-label="Write a comment"
             />
-            <button type="submit" disabled={!draft.trim()}>
+            <button type="submit" disabled={!draft.trim() || busy}>
               Send
             </button>
           </form>

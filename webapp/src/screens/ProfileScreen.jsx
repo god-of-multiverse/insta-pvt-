@@ -2,7 +2,7 @@ import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 
 /** WeChat's "Me" tab: profile header, then grouped setting rows. */
-const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments }) => {
+const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpenAdmin, onOpenNotifications, unread }) => {
   const user = currentUser || {};
   const name = user.username || 'you';
   const myId = String(user._id || user.id || '');
@@ -29,7 +29,14 @@ const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments }) => {
         <Avatar name={name} size="lg" />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="wx-me-name">{name}</div>
-          <div className="wx-me-id">Inasta ID: {user.email || name}</div>
+          <div className="wx-me-id">
+            Inasta ID: {user.email || name}
+            {user.plan && user.plan !== 'free' && (
+              <span style={{ color: '#07c160', marginLeft: 6, textTransform: 'uppercase', fontSize: 11 }}>
+                {user.plan}
+              </span>
+            )}
+          </div>
         </div>
         <div className="wx-qr">
           <Icon name="qr" size={17} />
@@ -42,7 +49,27 @@ const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments }) => {
         <Row icon="group" color="#576b95" title="My Circles" value={circles.length} last />
       </div>
 
+      {(user.role === 'admin' || user.role === 'moderator') && (
+        <div className="wx-group">
+          <Row
+            icon="group"
+            color="#fa5151"
+            title="Admin Console"
+            value={user.role}
+            onClick={onOpenAdmin}
+            last
+          />
+        </div>
+      )}
+
       <div className="wx-group">
+        <Row
+          icon="heart"
+          color="#fa5151"
+          title="Notifications"
+          value={unread ? String(unread) : ''}
+          onClick={onOpenNotifications}
+        />
         <Row icon="lock" color="#5a8fd6" title="Privacy" value="Private" />
         <Row icon="smile" color="#fa9d3b" title="Stickers" last />
       </div>

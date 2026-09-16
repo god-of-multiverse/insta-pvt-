@@ -12,6 +12,10 @@ import DiscoverScreen from './src/screens/DiscoverScreen';
 import ComposeScreen from './src/screens/UploadScreen';
 import MeScreen from './src/screens/ProfileScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import AdminScreen from './src/screens/AdminScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
+import SavedScreen from './src/screens/SavedScreen';
+import { StoryViewer, StoryComposer } from './src/components/Stories';
 
 const CIRCLES_KEY = 'inasta.circles';
 
@@ -34,6 +38,9 @@ function Shell() {
   const [circles, setCircles] = useState(readStoredCircles);
   const [posts, setPosts] = useState([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
+  const [trays, setTrays] = useState([]);
+  const [activeTray, setActiveTray] = useState(null);
+  const [unread, setUnread] = useState(0);
   const toast = useToast();
 
   const isLoggedIn = Boolean(currentUser && session.token);
@@ -54,9 +61,43 @@ function Shell() {
     }
   }, [activeCircle, toast]);
 
+  const loadStories = useCallback(async () => {
+    try {
+      const data = await api.get('/api/stories');
+      setTrays(data.trays || []);
+    } catch {
+      /* stories are non-critical */
+    }
+  }, []);
+
+  const loadUnread = useCallback(async () => {
+    try {
+      const data = await api.get('/api/notifications');
+      setUnread(data.unread ?? 0);
+    } catch {
+      /* non-critical */
+    }
+  }, []);
+
   useEffect(() => {
     if (isLoggedIn) loadPosts();
   }, [isLoggedIn, loadPosts]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return undefined;
+    loadStories();
+    loadUnread();
+    const id = setInterval(loadUnread, 20000);
+    return () => clearInterval(id);
+  }, [isLoggedIn, loadStories, loadUnread]);
+
+  // A hard sign-out from the API layer (rejected token) drops us to login
+  // cleanly instead of leaving a half-dead screen behind.
+  useEffect(() => {
+    const onSignedOut = () => setCurrentUser(null);
+    window.addEventListener('inasta:signed-out', onSignedOut);
+    return () => window.removeEventListener('inasta:signed-out', onSignedOut);
+  }, []);
 
   useEffect(() => {
     const found = [...new Set(posts.map((post) => post.circle).filter(Boolean))];
@@ -114,6 +155,53 @@ function Shell() {
     );
   }
 
+  if (overlay === 'admin') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body">
+          <AdminScreen currentUser={currentUser} onBack={() => setOverlay(null)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (overlay === 'saved') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body">
+          <SavedScreen onBack={() => setOverlay(null)} currentUser={currentUser} />
+        </div>
+      </div>
+    );
+  }
+
+  if (overlay === 'notifications') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body">
+          <NotificationsScreen onBack={() => setOverlay(null)} onRead={() => setUnread(0)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (overlay === 'story') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body" style={{ background: '#fff' }}>
+          <StoryComposer
+            circles={circles}
+            onClose={() => setOverlay('moments')}
+            onPosted={() => {
+              setOverlay('moments');
+              loadStories();
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (overlay === 'moments') {
     return (
       <div className="wx-shell">
@@ -127,8 +215,20 @@ function Shell() {
             currentUser={currentUser}
             onDeletePost={deletePost}
             onCompose={() => setOverlay('compose')}
+            trays={trays}
+            onOpenStory={setActiveTray}
+            onAddStory={() => setOverlay('story')}
           />
         </div>
+        {activeTray && (
+          <StoryViewer
+            tray={activeTray}
+            onClose={() => {
+              setActiveTray(null);
+              loadStories();
+            }}
+          />
+        )}
         <div className="wx-nav" style={{ position: 'sticky', bottom: 0, borderTop: '1px solid #e5e5e5' }}>
           <button className="wx-nav-btn left" onClick={() => setOverlay(null)} aria-label="Back">
             <span style={{ fontSize: 15 }}>‹ Back</span>
@@ -161,9 +261,15 @@ function Shell() {
 
       <div className="wx-body" style={{ background: tab === 'chat' && chatOpen ? '#ededed' : undefined }}>
         {tab === 'chat' && <ChatScreen currentUser={currentUser} onOpenChange={setChatOpen} />}
-        {tab === 'contacts' && <ContactsScreen onAddCircle={addCircle} />}
+        {tab === 'contacts' && <ContactsScreen onAddCircle={addCircle} currentUser={currentUser} />}
         {tab === 'discover' && (
-          <DiscoverScreen onOpenMoments={() => setOverlay('moments')} momentsBadge={posts.length || null} />
+          <DiscoverScreen
+            onOpenMoments={() => setOverlay('moments')}
+            momentsBadge={posts.length || null}
+            onOpenNotifications={() => setOverlay('notifications')}
+            onOpenSaved={() => setOverlay('saved')}
+            unread={unread}
+          />
         )}
         {tab === 'me' && (
           <MeScreen
@@ -172,6 +278,9 @@ function Shell() {
             circles={circles}
             onLogout={logout}
             onOpenMoments={() => setOverlay('moments')}
+            onOpenAdmin={() => setOverlay('admin')}
+            onOpenNotifications={() => setOverlay('notifications')}
+            unread={unread}
           />
         )}
       </div>
@@ -183,7 +292,7 @@ function Shell() {
             setTab(next);
             setChatOpen(false);
           }}
-          badges={{ discover: posts.length ? true : null }}
+          badges={{ discover: posts.length ? true : null, me: unread ? true : null }}
         />
       )}
     </div>

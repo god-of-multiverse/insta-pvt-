@@ -2,6 +2,7 @@ import { useState } from 'react';
 import MomentItem from '../components/PostCard';
 import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
+import { StoryTray } from '../components/Stories';
 
 /**
  * Moments (朋友圈): cover photo with the user's avatar overhanging its bottom
@@ -17,6 +18,9 @@ const MomentsScreen = ({
   currentUser,
   onDeletePost,
   onCompose,
+  trays = [],
+  onOpenStory,
+  onAddStory,
 }) => {
   const [filterOpen, setFilterOpen] = useState(false);
   const options = ['All', ...circles];
@@ -37,6 +41,13 @@ const MomentsScreen = ({
           <Avatar name={currentUser?.username || 'you'} className="wx-cover-av" />
         </div>
       </div>
+
+      <StoryTray
+        trays={trays}
+        currentUser={currentUser}
+        onOpen={onOpenStory}
+        onAdd={onAddStory}
+      />
 
       {/* Circle filter — WeChat's "who can see" concept surfaced as a strip */}
       <div

@@ -9,7 +9,7 @@ import { useToast } from '../components/Toast';
  * (New Friends / Group Chats / Tags), then contacts grouped under letter
  * headings with an alphabetical feel.
  */
-const ContactsScreen = ({ onAddCircle }) => {
+const ContactsScreen = ({ onAddCircle, currentUser }) => {
   const [groups, setGroups] = useState([]);
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +19,8 @@ const ContactsScreen = ({ onAddCircle }) => {
   const [selected, setSelected] = useState('');
   const [member, setMember] = useState('');
   const [busy, setBusy] = useState(false);
+  const [following, setFollowing] = useState(() => new Set());
+  const [blocked, setBlocked] = useState(() => new Set());
   const toast = useToast();
 
   useEffect(() => {
@@ -31,6 +33,10 @@ const ContactsScreen = ({ onAddCircle }) => {
         const list = groupResponse.groups || [];
         setGroups(list);
         setPeople(users || []);
+        setFollowing(
+          new Set((users || []).filter((u) => u.isFollowing).map((u) => String(u._id)))
+        );
+        setBlocked(new Set((users || []).filter((u) => u.isBlocked).map((u) => String(u._id))));
         if (list.length) setSelected(list[0]._id);
       } catch (error) {
         toast(error.message);
@@ -76,6 +82,43 @@ const ContactsScreen = ({ onAddCircle }) => {
       toast(error.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const toggleFollow = async (person) => {
+    const id = String(person._id);
+    const next = new Set(following);
+    // optimistic
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setFollowing(next);
+    try {
+      const r = await api.post(`/api/users/${id}/follow`, {});
+      setFollowing((prev) => {
+        const copy = new Set(prev);
+        if (r.following) copy.add(id);
+        else copy.delete(id);
+        return copy;
+      });
+    } catch (error) {
+      setFollowing(following);
+      toast(error.message);
+    }
+  };
+
+  const toggleBlock = async (person) => {
+    const id = String(person._id);
+    try {
+      const r = await api.post(`/api/users/${id}/block`, {});
+      setBlocked((prev) => {
+        const copy = new Set(prev);
+        if (r.blocked) copy.add(id);
+        else copy.delete(id);
+        return copy;
+      });
+      toast(r.blocked ? `${person.username} blocked` : `${person.username} unblocked`);
+    } catch (error) {
+      toast(error.message);
     }
   };
 
@@ -168,8 +211,29 @@ const ContactsScreen = ({ onAddCircle }) => {
                 >
                   <Avatar name={person.username} />
                   <span className="wx-cell-body">
-                    <span className="wx-cell-title">{person.username}</span>
+                    <span className="wx-cell-title">
+                      {person.username}
+                      {person.isVerified && (
+                        <span style={{ color: '#07c160', fontSize: 12, marginLeft: 5 }}>✓</span>
+                      )}
+                    </span>
+                    {blocked.has(String(person._id)) && (
+                      <span className="wx-cell-sub" style={{ color: '#fa5151' }}>Blocked</span>
+                    )}
                   </span>
+                  <button
+                    className={`wx-aud-chip ${following.has(String(person._id)) ? 'on' : ''}`}
+                    onClick={() => toggleFollow(person)}
+                  >
+                    {following.has(String(person._id)) ? 'Following' : 'Follow'}
+                  </button>
+                  <button
+                    onClick={() => toggleBlock(person)}
+                    style={{ marginLeft: 8, color: '#b2b2b2' }}
+                    aria-label="Block"
+                  >
+                    <Icon name="more" size={16} strokeWidth={2.4} />
+                  </button>
                 </div>
               ))}
             </div>
