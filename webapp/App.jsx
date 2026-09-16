@@ -99,6 +99,24 @@ function Shell() {
     return () => window.removeEventListener('inasta:signed-out', onSignedOut);
   }, []);
 
+  // The cached user in localStorage can be stale — it may predate fields like
+  // `role`, or point at an account that no longer exists. Re-fetch the real
+  // profile on boot so privileges are never decided from a stale copy.
+  useEffect(() => {
+    if (!session.token) return;
+    api
+      .get('/api/auth/me')
+      .then(({ user }) => {
+        session.save(session.token, user);
+        setCurrentUser(user);
+      })
+      .catch(() => {
+        // Token is dead (expired, or the account is gone). Start clean.
+        session.clear();
+        setCurrentUser(null);
+      });
+  }, []);
+
   useEffect(() => {
     const found = [...new Set(posts.map((post) => post.circle).filter(Boolean))];
     const missing = found.filter((name) => !circles.includes(name));

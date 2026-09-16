@@ -4,6 +4,23 @@ const User = require('../models/User');
 // @desc    Register a new user
 // @route   POST /api/auth/signup
 // @access  Public
+/**
+ * The single public shape of a user. Includes role/plan so the client can
+ * gate admin UI, and never leaks the password hash.
+ */
+const sanitize = (user) => ({
+  id: user._id,
+  _id: user._id,
+  username: user.username,
+  email: user.email,
+  bio: user.bio || '',
+  isPrivate: user.isPrivate,
+  role: user.role || 'user',
+  plan: user.plan || 'free',
+  isVerified: !!user.isVerified,
+  isBanned: !!user.isBanned,
+});
+
 exports.signup = async (req, res, next) => {
   try {
     const { username, email, password } = req.body;
@@ -48,12 +65,7 @@ exports.signup = async (req, res, next) => {
     res.status(201).json({
       message: 'Account created! 🎉',
       token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        isPrivate: user.isPrivate
-      }
+      user: sanitize(user)
     });
   } catch (error) {
     next(error);
@@ -98,14 +110,18 @@ exports.login = async (req, res, next) => {
     res.json({
       message: 'Login successful! ✅',
       token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        isPrivate: user.isPrivate
-      }
+      user: sanitize(user)
     });
   } catch (error) {
     next(error);
   }
+};
+
+/**
+ * Returns the authenticated user's current profile. The client calls this on
+ * boot so privileges (role, plan, ban state) always come from the server
+ * rather than a possibly-stale copy cached in localStorage.
+ */
+exports.me = async (req, res) => {
+  res.json({ user: sanitize(req.user) });
 };
