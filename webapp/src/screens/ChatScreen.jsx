@@ -12,7 +12,7 @@ const POLL_MS = 4000;
  *  - list of conversations (search bar pinned at the top)
  *  - a conversation, which replaces the list and gets a back chevron
  */
-const ChatScreen = ({ currentUser, onOpenChange }) => {
+const ChatScreen = ({ currentUser, onOpenChange, initialChat, onInitialChatUsed }) => {
   const [people, setPeople] = useState([]);
   const [groups, setGroups] = useState([]);
   const [active, setActive] = useState(null);
@@ -31,6 +31,16 @@ const ChatScreen = ({ currentUser, onOpenChange }) => {
   useEffect(() => {
     onOpenChange?.(Boolean(active));
   }, [active, onOpenChange]);
+
+  // Contacts can ask us to open a specific conversation. Wait until the lists
+  // are loaded so we can resolve the id to a real person or group.
+  useEffect(() => {
+    if (!initialChat || loadingList) return;
+    const pool = initialChat.kind === 'group' ? groups : people;
+    const item = pool.find((entry) => String(entry._id) === String(initialChat.id));
+    if (item) setActive({ kind: initialChat.kind, item });
+    onInitialChatUsed?.();
+  }, [initialChat, loadingList, groups, people, onInitialChatUsed]);
 
   useEffect(() => {
     let cancelled = false;

@@ -28,6 +28,9 @@ const userSchema = new mongoose.Schema({
   closeFriends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 
   // ---- Presence -----------------------------------------------------------
+  hideLastSeen: { type: Boolean, default: false },
+  hideStoryFromStrangers: { type: Boolean, default: false },
+  allowMentions: { type: Boolean, default: true },
   lastSeen: { type: Date, default: Date.now },
 
   createdAt: { type: Date, default: Date.now },

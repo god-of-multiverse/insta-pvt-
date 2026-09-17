@@ -9,7 +9,7 @@ import { useToast } from '../components/Toast';
  * (New Friends / Group Chats / Tags), then contacts grouped under letter
  * headings with an alphabetical feel.
  */
-const ContactsScreen = ({ onAddCircle, currentUser }) => {
+const ContactsScreen = ({ onAddCircle, currentUser, onOpenChat }) => {
   const [groups, setGroups] = useState([]);
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -178,9 +178,10 @@ const ContactsScreen = ({ onAddCircle, currentUser }) => {
           <div className="wx-section-label">Groups</div>
           <div className="wx-group" style={{ marginTop: 0 }}>
             {groups.map((group, index) => (
-              <div
+              <button
                 key={group._id}
                 className={`wx-cell ${index < groups.length - 1 ? 'hair-b hair-inset' : ''}`}
+                onClick={() => onOpenChat?.({ kind: 'group', id: group._id })}
               >
                 <Avatar name={group.name} group />
                 <span className="wx-cell-body">
@@ -189,7 +190,8 @@ const ContactsScreen = ({ onAddCircle, currentUser }) => {
                     {(group.members || []).map((m) => m.username).join(', ') || 'Only you'}
                   </span>
                 </span>
-              </div>
+                <Icon name="chev" size={16} strokeWidth={2} className="wx-chev" />
+              </button>
             ))}
           </div>
         </>

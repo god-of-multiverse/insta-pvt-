@@ -874,7 +874,35 @@ app.delete('/api/circles/:id', auth, (req, res) => {
   res.json({ message: 'Circle deleted' });
 });
 
+/* --------------------------------------------------------------- privacy -- */
+
+const PRIVACY_KEYS = ['isPrivate', 'hideLastSeen', 'hideStoryFromStrangers', 'allowMentions'];
+
+const privacyOf = (u) => ({
+  isPrivate: !!u.isPrivate,
+  hideLastSeen: !!u.hideLastSeen,
+  hideStoryFromStrangers: !!u.hideStoryFromStrangers,
+  allowMentions: u.allowMentions !== false,
+});
+
+app.get('/api/privacy', auth, (req, res) => {
+  const blocked = (req.user.blocked || [])
+    .map((bid) => findUser(bid))
+    .filter(Boolean)
+    .map(pub);
+  res.json({ settings: privacyOf(req.user), blocked });
+});
+
+app.patch('/api/privacy', auth, (req, res) => {
+  PRIVACY_KEYS.forEach((k) => {
+    if (typeof req.body?.[k] === 'boolean') req.user[k] = req.body[k];
+  });
+  save();
+  res.json({ settings: privacyOf(req.user) });
+});
+
 /* ---------------------------------------------------------- static client -- */
+
 
 
 const clientDist = path.join(__dirname, '..', 'webapp', 'dist');

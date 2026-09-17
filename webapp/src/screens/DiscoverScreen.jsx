@@ -4,7 +4,7 @@ import Icon from '../components/Icon';
  * Discover tab — WeChat's grouped-list hub. Moments sits alone at the top,
  * which is how you reach the feed in the real app.
  */
-const DiscoverScreen = ({ onOpenMoments, momentsBadge, onOpenNotifications, onOpenSaved, unread }) => {
+const DiscoverScreen = ({ onOpenMoments, momentsBadge, onOpenNotifications, onOpenSaved, onOpenScan, onOpenStickers, unread }) => {
   const Row = ({ icon, color, title, last, badge, onClick }) => (
     <button className={`wx-cell ${last ? '' : 'hair-b hair-inset'}`} onClick={onClick}>
       <span className="wx-cell-ico" style={{ background: color }}>
@@ -43,8 +43,8 @@ const DiscoverScreen = ({ onOpenMoments, momentsBadge, onOpenNotifications, onOp
       </div>
 
       <div className="wx-group">
-        <Row icon="qr" color="#2782d7" title="Scan" />
-        <Row icon="smile" color="#fa9d3b" title="Stickers" last />
+        <Row icon="qr" color="#2782d7" title="Scan" onClick={onOpenScan} />
+        <Row icon="smile" color="#fa9d3b" title="Stickers" onClick={onOpenStickers} last />
       </div>
 
       <div style={{ height: 20 }} />

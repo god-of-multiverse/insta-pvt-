@@ -16,6 +16,9 @@ import AdminScreen from './src/screens/AdminScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import SavedScreen from './src/screens/SavedScreen';
 import CirclesScreen from './src/screens/CirclesScreen';
+import PrivacyScreen from './src/screens/PrivacyScreen';
+import StickersScreen from './src/screens/StickersScreen';
+import ScanScreen from './src/screens/ScanScreen';
 import { StoryViewer, StoryComposer } from './src/components/Stories';
 
 const CIRCLES_KEY = 'inasta.circles';
@@ -42,6 +45,7 @@ function Shell() {
   const [trays, setTrays] = useState([]);
   const [activeTray, setActiveTray] = useState(null);
   const [unread, setUnread] = useState(0);
+  const [pendingChat, setPendingChat] = useState(null);
   const toast = useToast();
 
   const isLoggedIn = Boolean(currentUser && session.token);
@@ -184,6 +188,40 @@ function Shell() {
     );
   }
 
+  if (overlay === 'privacy') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body">
+          <PrivacyScreen
+            onBack={() => setOverlay(null)}
+            currentUser={currentUser}
+            onUserChange={setCurrentUser}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (overlay === 'stickers') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body">
+          <StickersScreen onBack={() => setOverlay(null)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (overlay === 'scan') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body">
+          <ScanScreen onBack={() => setOverlay(null)} currentUser={currentUser} />
+        </div>
+      </div>
+    );
+  }
+
   if (overlay === 'circles') {
     return (
       <div className="wx-shell">
@@ -279,7 +317,11 @@ function Shell() {
           <span />
           <div className="wx-nav-title">{titles[tab]}</div>
           {tab === 'chat' ? (
-            <button className="wx-nav-btn right" aria-label="New chat">
+            <button
+              className="wx-nav-btn right"
+              aria-label="New chat"
+              onClick={() => setTab('contacts')}
+            >
               <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
             </button>
           ) : (
@@ -289,14 +331,32 @@ function Shell() {
       )}
 
       <div className="wx-body" style={{ background: tab === 'chat' && chatOpen ? '#ededed' : undefined }}>
-        {tab === 'chat' && <ChatScreen currentUser={currentUser} onOpenChange={setChatOpen} />}
-        {tab === 'contacts' && <ContactsScreen onAddCircle={addCircle} currentUser={currentUser} />}
+        {tab === 'chat' && (
+          <ChatScreen
+            currentUser={currentUser}
+            onOpenChange={setChatOpen}
+            initialChat={pendingChat}
+            onInitialChatUsed={() => setPendingChat(null)}
+          />
+        )}
+        {tab === 'contacts' && (
+          <ContactsScreen
+            onAddCircle={addCircle}
+            currentUser={currentUser}
+            onOpenChat={(req) => {
+              setPendingChat(req);
+              setTab('chat');
+            }}
+          />
+        )}
         {tab === 'discover' && (
           <DiscoverScreen
             onOpenMoments={() => setOverlay('moments')}
             momentsBadge={posts.length || null}
             onOpenNotifications={() => setOverlay('notifications')}
             onOpenSaved={() => setOverlay('saved')}
+            onOpenScan={() => setOverlay('scan')}
+            onOpenStickers={() => setOverlay('stickers')}
             unread={unread}
           />
         )}
@@ -309,6 +369,9 @@ function Shell() {
             onOpenMoments={() => setOverlay('moments')}
             onOpenAdmin={() => setOverlay('admin')}
             onOpenCircles={() => setOverlay('circles')}
+            onOpenPrivacy={() => setOverlay('privacy')}
+            onOpenStickers={() => setOverlay('stickers')}
+            onOpenScan={() => setOverlay('scan')}
             onOpenNotifications={() => setOverlay('notifications')}
             unread={unread}
           />

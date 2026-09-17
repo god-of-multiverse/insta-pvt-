@@ -2,7 +2,7 @@ import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 
 /** WeChat's "Me" tab: profile header, then grouped setting rows. */
-const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpenAdmin, onOpenCircles, onOpenNotifications, unread }) => {
+const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpenAdmin, onOpenCircles, onOpenPrivacy, onOpenStickers, onOpenScan, onOpenNotifications, unread }) => {
   const user = currentUser || {};
   const name = user.username || 'you';
   const myId = String(user._id || user.id || '');
@@ -38,10 +38,10 @@ const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpen
             )}
           </div>
         </div>
-        <div className="wx-qr">
+        <button className="wx-qr" onClick={onOpenScan}>
           <Icon name="qr" size={17} />
           <Icon name="chev" size={15} strokeWidth={2} />
-        </div>
+        </button>
       </div>
 
       <div className="wx-group">
@@ -77,8 +77,8 @@ const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpen
           value={unread ? String(unread) : ''}
           onClick={onOpenNotifications}
         />
-        <Row icon="lock" color="#5a8fd6" title="Privacy" value="Private" />
-        <Row icon="smile" color="#fa9d3b" title="Stickers" last />
+        <Row icon="lock" color="#5a8fd6" title="Privacy" value={user.isPrivate ? 'Private' : 'Standard'} onClick={onOpenPrivacy} />
+        <Row icon="smile" color="#fa9d3b" title="Stickers" onClick={onOpenStickers} last />
       </div>
 
       <button className="wx-logout" onClick={onLogout}>
