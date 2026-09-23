@@ -2,7 +2,7 @@ import Icon from '../components/Icon';
 import Avatar from '../components/Avatar';
 
 /** WeChat's "Me" tab: profile header, then grouped setting rows. */
-const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpenAdmin, onOpenCircles, onOpenPrivacy, onOpenStickers, onOpenScan, onOpenNotifications, unread }) => {
+const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpenAdmin, onOpenCircles, onOpenPrivacy, onOpenStickers, onOpenScan, onOpenNotifications, unread, onOpenAssistant }) => {
   const user = currentUser || {};
   const name = user.username || 'you';
   const myId = String(user._id || user.id || '');
@@ -78,7 +78,8 @@ const MeScreen = ({ currentUser, posts, circles, onLogout, onOpenMoments, onOpen
           onClick={onOpenNotifications}
         />
         <Row icon="lock" color="#5a8fd6" title="Privacy" value={user.isPrivate ? 'Private' : 'Standard'} onClick={onOpenPrivacy} />
-        <Row icon="smile" color="#fa9d3b" title="Stickers" onClick={onOpenStickers} last />
+        <Row icon="smile" color="#fa9d3b" title="Stickers" onClick={onOpenStickers} />
+        <Row icon="chats" color="#07c160" title="Assistant" onClick={onOpenAssistant} last />
       </div>
 
       <button className="wx-logout" onClick={onLogout}>

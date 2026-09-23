@@ -18,6 +18,7 @@ import SavedScreen from './src/screens/SavedScreen';
 import CirclesScreen from './src/screens/CirclesScreen';
 import PrivacyScreen from './src/screens/PrivacyScreen';
 import StickersScreen from './src/screens/StickersScreen';
+import AssistantScreen from './src/screens/AssistantScreen';
 import ScanScreen from './src/screens/ScanScreen';
 import { StoryViewer, StoryComposer } from './src/components/Stories';
 
@@ -202,6 +203,16 @@ function Shell() {
     );
   }
 
+  if (overlay === 'assistant') {
+    return (
+      <div className="wx-shell">
+        <div className="wx-body">
+          <AssistantScreen onBack={() => setOverlay(null)} currentUser={currentUser} />
+        </div>
+      </div>
+    );
+  }
+
   if (overlay === 'stickers') {
     return (
       <div className="wx-shell">
@@ -357,6 +368,7 @@ function Shell() {
             onOpenSaved={() => setOverlay('saved')}
             onOpenScan={() => setOverlay('scan')}
             onOpenStickers={() => setOverlay('stickers')}
+            onOpenAssistant={() => setOverlay('assistant')}
             unread={unread}
           />
         )}
@@ -371,6 +383,7 @@ function Shell() {
             onOpenCircles={() => setOverlay('circles')}
             onOpenPrivacy={() => setOverlay('privacy')}
             onOpenStickers={() => setOverlay('stickers')}
+            onOpenAssistant={() => setOverlay('assistant')}
             onOpenScan={() => setOverlay('scan')}
             onOpenNotifications={() => setOverlay('notifications')}
             unread={unread}

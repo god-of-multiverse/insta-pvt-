@@ -235,3 +235,120 @@ describe('session durability', () => {
     );
   });
 });
+
+/**
+ * The assistant is a learning agent, which means its behaviour is meant to
+ * change over time. That makes it easy to break silently: a scoring tweak can
+ * leave it answering but no longer learning, and nothing would look wrong.
+ * These pin the loop rather than any particular wording.
+ */
+describe('assistant', () => {
+  const ask = async (question, token) =>
+    fetch(`${BASE}/api/assistant/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ question }),
+    });
+
+  test('requires a session', async () => {
+    const res = await fetch(`${BASE}/api/assistant/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: 'what is this app' }),
+    });
+    assert.equal(res.status, 401);
+  });
+
+  test('answers a question it knows', async () => {
+    const res = await ask('what is this app', await login('ada@inasta.app'));
+    assert.equal(res.status, 200);
+    const turn = await res.json();
+    assert.equal(turn.ok, true);
+    assert.equal(turn.intent, 'about');
+  });
+
+  test('admits when it does not know', async () => {
+    const token = await login('ada@inasta.app');
+    const turn = await (await ask('what is the airspeed of a swallow', token)).json();
+    assert.equal(turn.ok, false, 'should not invent an answer');
+  });
+
+  test('learns a corrected answer and reuses it for everyone', async () => {
+    const ada = await login('ada@inasta.app');
+    const miss = await (await ask('how do i export my data', ada)).json();
+    assert.equal(miss.ok, false);
+
+    const fed = await fetch(`${BASE}/api/assistant/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ada}` },
+      body: JSON.stringify({
+        turnId: miss._id,
+        helpful: false,
+        correction: 'Data export is in Me > Settings > Export.',
+      }),
+    });
+    assert.equal(fed.status, 200);
+    assert.equal((await fed.json()).taught, true);
+
+    // Same user, now answered.
+    const retry = await (await ask('how do i export my data', ada)).json();
+    assert.equal(retry.ok, true, 'the taught answer should be retrievable');
+    assert.match(retry.answer, /Export/);
+
+    // And a different user benefits from it too.
+    const kai = await login('kai@inasta.app');
+    const shared = await (await ask('export my data', kai)).json();
+    assert.match(shared.answer, /Export/, 'knowledge should be shared, not per-user');
+  });
+
+  test('history is per-user', async () => {
+    const ada = await login('ada@inasta.app');
+    const mira = await login('mira@inasta.app');
+    await ask('what are circles', ada);
+
+    const mine = await (
+      await fetch(`${BASE}/api/assistant/history`, {
+        headers: { Authorization: `Bearer ${ada}` },
+      })
+    ).json();
+    const theirs = await (
+      await fetch(`${BASE}/api/assistant/history`, {
+        headers: { Authorization: `Bearer ${mira}` },
+      })
+    ).json();
+
+    assert.ok(mine.length > 0);
+    assert.ok(
+      !theirs.some((t) => mine.some((m) => m._id === t._id)),
+      'one user must not see another user\'s conversation'
+    );
+  });
+
+  test('a user cannot rate an answer that is not theirs', async () => {
+    const ada = await login('ada@inasta.app');
+    const mira = await login('mira@inasta.app');
+    const turn = await (await ask('what are stickers', ada)).json();
+
+    const res = await fetch(`${BASE}/api/assistant/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mira}` },
+      body: JSON.stringify({ turnId: turn._id, helpful: true }),
+    });
+    assert.equal(res.status, 404);
+  });
+
+  test('insights are admin-only', async () => {
+    const user = await fetch(`${BASE}/api/assistant/insights`, {
+      headers: { Authorization: `Bearer ${await login('ada@inasta.app')}` },
+    });
+    assert.equal(user.status, 403);
+
+    const admin = await fetch(`${BASE}/api/assistant/insights`, {
+      headers: { Authorization: `Bearer ${await login('admin@inasta.app')}` },
+    });
+    assert.equal(admin.status, 200);
+    const body = await admin.json();
+    assert.ok(body.stats);
+    assert.ok(Array.isArray(body.taught));
+  });
+});

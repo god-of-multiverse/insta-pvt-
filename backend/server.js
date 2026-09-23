@@ -52,6 +52,7 @@ app.use('/api/group-messages', groupMessageRoutes);
 app.use('/api', socialRoutes);
 app.use('/api/privacy', require('./routes/privacy'));
 app.use('/api/circles', require('./routes/circles'));
+app.use('/api/assistant', require('./routes/assistant'));
 app.use('/api/stories', storyRoutes);
 app.use('/api/admin', adminRoutes);
 

@@ -19,6 +19,17 @@ const Stat = ({ label, value, sub, accent }) => (
 /** Tiny inline bar chart for the 14-day signup trend. */
 const Spark = ({ data }) => {
   const max = Math.max(1, ...data.map((d) => d.count));
+  useEffect(() => {
+    if (tab !== 'assistant' || insights) return;
+    (async () => {
+      try {
+        setInsights(await api.get('/api/assistant/insights'));
+      } catch (error) {
+        toast(error.message);
+      }
+    })();
+  }, [tab, insights, toast]);
+
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 54, marginTop: 10 }}>
       {data.map((d) => (
@@ -39,6 +50,7 @@ const Spark = ({ data }) => {
 
 const AdminScreen = ({ onBack, currentUser }) => {
   const [tab, setTab] = useState('overview');
+  const [insights, setInsights] = useState(null);
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [posts, setPosts] = useState([]);
@@ -136,6 +148,7 @@ const AdminScreen = ({ onBack, currentUser }) => {
           ['overview', 'Overview'],
           ['users', 'Users'],
           ['content', 'Content'],
+          ['assistant', 'Assistant'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -432,6 +445,98 @@ const AdminScreen = ({ onBack, currentUser }) => {
               </button>
             )}
           </div>
+        </div>
+      )}
+      {/* --------------------------------------------------------- assistant */}
+      {!loading && tab === 'assistant' && (
+        <div style={{ padding: 10 }}>
+          {!insights ? (
+            <div className="wx-loading">
+              <div className="wx-spin" />
+            </div>
+          ) : (
+            <>
+              <div className="wx-section-label" style={{ background: 'none' }}>
+                How it is doing
+              </div>
+              <div className="wx-group">
+                <div className="wx-cell hair-b hair-inset">
+                  <span className="wx-cell-title">Questions asked</span>
+                  <span className="wx-cell-value">{insights.stats.asked}</span>
+                </div>
+                <div className="wx-cell hair-b hair-inset">
+                  <span className="wx-cell-title">Answered confidently</span>
+                  <span className="wx-cell-value">
+                    {insights.stats.coverage === null ? '—' : `${insights.stats.coverage}%`}
+                  </span>
+                </div>
+                <div className="wx-cell hair-b hair-inset">
+                  <span className="wx-cell-title">Rated helpful</span>
+                  <span className="wx-cell-value">
+                    {insights.stats.satisfaction === null
+                      ? '—'
+                      : `${insights.stats.satisfaction}%`}
+                  </span>
+                </div>
+                <div className="wx-cell">
+                  <span className="wx-cell-title">Answers taught by users</span>
+                  <span className="wx-cell-value">{insights.stats.taught}</span>
+                </div>
+              </div>
+
+              <div className="wx-section-label" style={{ background: 'none' }}>
+                Gaps — asked but not answered
+              </div>
+              <div className="wx-group">
+                {insights.unanswered.length === 0 ? (
+                  <div className="wx-cell">
+                    <span className="wx-cell-title" style={{ color: '#9a9a9a' }}>
+                      Nothing outstanding.
+                    </span>
+                  </div>
+                ) : (
+                  insights.unanswered.map((u, i) => (
+                    <div
+                      key={u.question}
+                      className={`wx-cell ${
+                        i === insights.unanswered.length - 1 ? '' : 'hair-b hair-inset'
+                      }`}
+                    >
+                      <span className="wx-cell-title">{u.question}</span>
+                      <span className="wx-cell-value">{u.count}×</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="wx-section-label" style={{ background: 'none' }}>
+                Taught by users
+              </div>
+              <div className="wx-group">
+                {insights.taught.length === 0 ? (
+                  <div className="wx-cell">
+                    <span className="wx-cell-title" style={{ color: '#9a9a9a' }}>
+                      Nothing taught yet.
+                    </span>
+                  </div>
+                ) : (
+                  insights.taught.map((t, i) => (
+                    <div
+                      key={t.id}
+                      className={`wx-cell ${
+                        i === insights.taught.length - 1 ? '' : 'hair-b hair-inset'
+                      }`}
+                      style={{ display: 'block', padding: '10px 16px' }}
+                    >
+                      <div style={{ fontSize: 13, color: '#7f7f7f' }}>{t.question}</div>
+                      <div style={{ fontSize: 14, marginTop: 3 }}>{t.answer}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div style={{ height: 20 }} />
+            </>
+          )}
         </div>
       )}
     </div>

@@ -61,6 +61,8 @@ let db = {
   stories: [],
   notifications: [],
   circles: [],
+  assistantMemory: null,
+  assistantLog: [],
 };
 
 const save = () => {
@@ -75,7 +77,7 @@ const load = () => {
   if (!fs.existsSync(DATA_FILE)) return false;
   try {
     const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    db = { stories: [], notifications: [], circles: [], ...parsed };
+    db = { stories: [], notifications: [], circles: [], assistantMemory: null, assistantLog: [], ...parsed };
     return Array.isArray(db.users) && db.users.length > 0;
   } catch {
     return false;
@@ -899,6 +901,92 @@ app.patch('/api/privacy', auth, (req, res) => {
   });
   save();
   res.json({ settings: privacyOf(req.user) });
+});
+
+/* ------------------------------------------------------------- assistant -- */
+
+const assistant = require('./lib/assistant');
+
+const memory = () => {
+  if (!db.assistantMemory) db.assistantMemory = assistant.emptyMemory();
+  return db.assistantMemory;
+};
+
+/** POST /api/assistant/ask — put a question to the agent. */
+app.post('/api/assistant/ask', auth, (req, res) => {
+  const question = String(req.body?.question || '').trim();
+  if (!question) return res.status(400).json({ error: 'Ask me something.' });
+  if (question.length > 500) return res.status(400).json({ error: 'That question is too long.' });
+
+  let mem = assistant.normalizeMemory(memory());
+  const result = assistant.ask(question, mem);
+
+  mem.stats.asked += 1;
+  if (result.ok) mem.stats.answered += 1;
+  else mem = assistant.noteUnanswered(mem, question, req.user._id);
+
+  // Keep a transcript so the conversation survives a reload.
+  const turn = {
+    _id: id(),
+    user: req.user._id,
+    question,
+    answer: result.answer,
+    intent: result.intent,
+    confidence: result.confidence,
+    ok: result.ok,
+    rated: null,
+    createdAt: now(),
+  };
+  db.assistantLog.push(turn);
+  if (db.assistantLog.length > 500) db.assistantLog = db.assistantLog.slice(-500);
+
+  db.assistantMemory = mem;
+  save();
+  res.json(turn);
+});
+
+/** GET /api/assistant/history — this user's transcript. */
+app.get('/api/assistant/history', auth, (req, res) => {
+  const mine = db.assistantLog
+    .filter((t) => String(t.user) === String(req.user._id))
+    .slice(-50);
+  res.json(mine);
+});
+
+/** POST /api/assistant/feedback — the learning signal. */
+app.post('/api/assistant/feedback', auth, (req, res) => {
+  const { turnId, helpful, correction } = req.body || {};
+  const turn = db.assistantLog.find(
+    (t) => String(t._id) === String(turnId) && String(t.user) === String(req.user._id)
+  );
+  if (!turn) return res.status(404).json({ error: 'No such answer.' });
+
+  const { memory: next, taught } = assistant.learn(assistant.normalizeMemory(memory()), {
+    question: turn.question,
+    intent: turn.intent,
+    helpful: !!helpful,
+    correction,
+    userId: req.user._id,
+  });
+
+  db.assistantMemory = next;
+  turn.rated = helpful ? 'up' : 'down';
+  if (taught) turn.taughtId = taught.id;
+  save();
+
+  res.json({ ok: true, rated: turn.rated, taught: !!taught });
+});
+
+/** DELETE /api/assistant/history — clear my transcript. */
+app.delete('/api/assistant/history', auth, (req, res) => {
+  db.assistantLog = db.assistantLog.filter((t) => String(t.user) !== String(req.user._id));
+  save();
+  res.json({ ok: true });
+});
+
+/** GET /api/assistant/insights — admin view of what it has learned. */
+app.get('/api/assistant/insights', auth, adminOnly, (req, res) => {
+  res.json(assistant.insights(memory()));
 });
 
 /* ---------------------------------------------------------- static client -- */
